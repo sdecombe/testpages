@@ -3,21 +3,19 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>Code Aztec mobile avec réglage de taille</title>
+  <title>Code Aztec mobile – taille réglable</title>
 
   <style>
     :root {
       color-scheme: light dark;
-      --bg: #f7f7f7;
+      --bg: #f3f4f6;
       --fg: #111;
-      --panel: #ffffff; /* fond blanc pour lisibilité du code */
-      --code-size-cm: 3; /* taille du symbole en centimètres (1 à 5) */
+      --code-size-cm: 3; /* taille du code-barres (1 à 5 cm), sans marge */
     }
     @media (prefers-color-scheme: dark) {
       :root {
         --bg: #0f1115;
         --fg: #e8e8e8;
-        --panel: #ffffff;
       }
     }
 
@@ -29,8 +27,10 @@
       font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", sans-serif;
     }
 
+    /* Conteneur global */
     .page {
       min-height: 100%;
+      position: relative;
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -40,7 +40,27 @@
       gap: 10px;
     }
 
-    /* Contrôles en haut (slider de taille) */
+    /* Fond blanc sur la moitié supérieure (sous le contenu) */
+    .page::before {
+      content: "";
+      position: absolute;
+      inset: 0 0 50% 0; /* haut: 0, bas: 50% -> moitié supérieure */
+      background: #ffffff;
+      z-index: 0;
+    }
+
+    /* Couche de contenu au-dessus du fond */
+    .content {
+      position: relative;
+      z-index: 1;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* Contrôles (slider) */
     .controls {
       width: 100%;
       max-width: 520px;
@@ -48,7 +68,7 @@
       align-items: center;
       gap: 10px;
       justify-content: center;
-      margin-top: 4px;
+      margin-top: 2px;
       flex-wrap: wrap;
     }
     .controls label {
@@ -64,32 +84,31 @@
       font-variant-numeric: tabular-nums;
     }
 
-    /* Zone du code (en haut) */
+    /* Zone du code (vers le haut), sans marge autour du symbole */
     .code-area {
       width: 100%;
       display: flex;
       justify-content: center;
-      margin-top: 2px; /* rapproche du haut */
+      margin-top: 2px;
     }
     .code-box {
-      background: var(--panel);
-      width: calc(var(--code-size-cm) * 1cm);   /* taille du symbole en cm */
+      /* plus de padding, plus de fond : taille = symbole uniquement */
+      width: calc(var(--code-size-cm) * 1cm);
       height: calc(var(--code-size-cm) * 1cm);
-      padding: 12px;               /* marge blanche autour du symbole */
-      border-radius: 8px;          /* optionnel */
-      box-shadow: 0 4px 14px rgba(0,0,0,0.08);
       display: flex;
       align-items: center;
       justify-content: center;
-      box-sizing: content-box;     /* la largeur/hauteur visent le symbole, padding en plus */
+      box-sizing: content-box; /* la taille CSS correspond au symbole */
     }
+    /* Le canvas occupe 100% de la boîte, sans marge */
     canvas#aztec {
       display: block;
       width: 100%;
       height: 100%;
+      background: #ffffff; /* fond interne blanc si tu veux garantir un fond du symbole */
     }
 
-    /* Quadrillage / règle au milieu de la page */
+    /* Quadrillage / règle au milieu */
     .ruler-area {
       width: 100%;
       display: flex;
@@ -98,7 +117,6 @@
       padding: 8px 0;
     }
     .ruler-wrap {
-      /* zone visible de la règle : 8 cm x 4 cm (modifiable si besoin) */
       width: 8cm;
       height: 4cm;
       background: #fff;
@@ -140,27 +158,29 @@
 </head>
 <body>
   <main class="page">
-    <!-- Contrôle de taille -->
-    <div class="controls" aria-label="Réglage de la taille du code Aztec">
-      <label for="sizeRange">Taille du code :</label>
-      <input id="sizeRange" type="range" min="1" max="5" step="0.1" value="3" />
-      <span class="size-readout"><span id="sizeValue">3.0</span> cm</span>
+    <div class="content">
+      <!-- Contrôle de taille -->
+      <div class="controls" aria-label="Réglage de la taille du code Aztec">
+        <label for="sizeRange">Taille du code :</label>
+        <input id="sizeRange" type="range" min="1" max="5" step="0.1" value="3" />
+        <span class="size-readout"><span id="sizeValue">3.0</span> cm</span>
+      </div>
+
+      <!-- Code Aztec (en haut) -->
+      <section class="code-area" aria-label="Zone du code Aztec">
+        <div class="code-box" id="code-box">
+          <canvas id="aztec"></canvas>
+        </div>
+      </section>
+
+      <!-- Quadrillage / règle (milieu de page) -->
+      <section class="ruler-area" aria-label="Quadrillage et règle">
+        <div class="ruler-wrap">
+          <div class="ruler-title">Quadrillage / règle (mm & cm)</div>
+          <canvas id="ruler"></canvas>
+        </div>
+      </section>
     </div>
-
-    <!-- Code Aztec (en haut) -->
-    <section class="code-area" aria-label="Zone du code Aztec">
-      <div class="code-box" id="code-box">
-        <canvas id="aztec"></canvas>
-      </div>
-    </section>
-
-    <!-- Quadrillage / règle (milieu de page) -->
-    <section class="ruler-area" aria-label="Quadrillage et règle">
-      <div class="ruler-wrap">
-        <div class="ruler-title">Quadrillage / règle (mm & cm)</div>
-        <canvas id="ruler"></canvas>
-      </div>
-    </section>
 
     <footer id="footer-text">Texte de bas de page</footer>
   </main>
@@ -170,91 +190,91 @@
 
   <script>
     /**
-     * Paramètres à personnaliser
+     * Paramètres à ajuster
      * - content : la donnée encodée (URL, texte, etc.)
-     * - footer  : texte affiché en bas de page
+     * - footer  : texte de bas de page
      * - compact : true pour Aztec compact
      */
     const settings = {
-      content: "AZTEC_CONTENT_HERE",      // ex: "https://exemple.com/checkin"
+      content: "AZTEC_CONTENT_HERE",  // ex: "https://exemple.com/checkin"
       footer: "Texte de bas de page",
       compact: false
     };
 
-    // Init footer
+    // Met le footer
     document.getElementById("footer-text").textContent = settings.footer;
 
-    // ----------- Rendu du code Aztec -----------
+    // ---- Rendu du code Aztec (taille = symbole seulement) ----
     function renderAztec() {
       const canvas = document.getElementById('aztec');
       const box = document.getElementById('code-box');
 
-      // Taille intérieure disponible (en px CSS)
+      // Taille cible en px CSS (sans marge)
       const rect = box.getBoundingClientRect();
-      const style = getComputedStyle(box);
-      const padX = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
-      const padY = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
-      const innerW = Math.max(0, rect.width - padX);
-      const innerH = Math.max(0, rect.height - padY);
-      const size = Math.floor(Math.min(innerW, innerH));
+      const sizeCss = Math.floor(Math.min(rect.width, rect.height));
 
+      // Haute densité
       const dpr = Math.max(1, window.devicePixelRatio || 1);
-      canvas.width  = Math.floor(size * dpr);
-      canvas.height = Math.floor(size * dpr);
-      canvas.style.width  = size + 'px';
-      canvas.style.height = size + 'px';
+      canvas.width  = Math.floor(sizeCss * dpr);
+      canvas.height = Math.floor(sizeCss * dpr);
+      canvas.style.width  = sizeCss + 'px';
+      canvas.style.height = sizeCss + 'px';
 
+      // Choix du symbole
       const bcid = settings.compact ? 'azteccodecompact' : 'azteccode';
 
+      // Efface le canvas
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
       try {
-        // Échelle heuristique pour remplir le carré
+        // Pas de padding interne : taille exacte du symbole
+        // On ajuste l'échelle pour remplir le carré cible
+        const scale = Math.max(2, Math.floor((sizeCss * dpr) / 120));
+
         bwipjs.toCanvas(canvas, {
           bcid,
           text: settings.content,
-          scale: Math.max(2, Math.floor((size * dpr) / 120)),
-          padding: 8,                // marge blanche interne au symbole
+          scale: scale,
+          padding: 0,               // *** aucune marge ajoutée ***
           backgroundcolor: 'FFFFFF',
           includetext: false
         });
       } catch (err) {
         console.error('Erreur bwip-js:', err);
-        const ctx = canvas.getContext('2d');
         ctx.fillStyle = '#fff';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.fillStyle = '#d00';
-        ctx.font = (14 * (window.devicePixelRatio||1)) + 'px system-ui, sans-serif';
+        ctx.font = (14 * dpr) + 'px system-ui, sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText('Erreur génération Aztec', canvas.width/2, canvas.height/2);
+        ctx.fillText('Erreur Aztec', canvas.width/2, canvas.height/2);
       }
     }
 
-    // ----------- Quadrillage / Règle -----------
+    // ---- Quadrillage / Règle ----
     function renderRuler() {
       const canvas = document.getElementById('ruler');
       const dpr = Math.max(1, window.devicePixelRatio || 1);
       const rect = canvas.getBoundingClientRect();
       canvas.width  = Math.floor(rect.width * dpr);
       canvas.height = Math.floor(rect.height * dpr);
-
       const ctx = canvas.getContext('2d');
-      ctx.scale(dpr, dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-      // Dimensions en px CSS
       const W = rect.width;
       const H = rect.height;
 
-      // Estimation des pixels par centimètre (en se basant sur CSS "cm")
-      // 1 cm en px CSS :
-      const test = document.createElement('div');
-      test.style.position = 'absolute';
-      test.style.left = '-9999px';
-      test.style.top = '-9999px';
-      test.style.width = '1cm';
-      test.style.height = '1cm';
-      document.body.appendChild(test);
-      const cmRect = test.getBoundingClientRect();
-      document.body.removeChild(test);
+      // Mesure CSS de 1cm -> pixels
+      const probe = document.createElement('div');
+      probe.style.position = 'absolute';
+      probe.style.left = '-9999px';
+      probe.style.top = '-9999px';
+      probe.style.width = '1cm';
+      probe.style.height = '1cm';
+      document.body.appendChild(probe);
+      const cmRect = probe.getBoundingClientRect();
+      document.body.removeChild(probe);
       const pxPerCm = cmRect.width;
       const pxPerMm = pxPerCm / 10;
 
@@ -263,24 +283,26 @@
       ctx.fillRect(0, 0, W, H);
 
       // Quadrillage mm
-      for (let x = 0; x <= W; x += pxPerMm) {
+      for (let x = 0; x <= W + 0.5; x += pxPerMm) {
         ctx.beginPath();
         ctx.moveTo(Math.round(x) + 0.5, 0);
         ctx.lineTo(Math.round(x) + 0.5, H);
-        ctx.strokeStyle = (Math.round(x / pxPerMm) % 10 === 0) ? '#d0d6e0' : '#eceff4';
-        ctx.lineWidth = (Math.round(x / pxPerMm) % 10 === 0) ? 1.0 : 0.5;
+        const mmIndex = Math.round(x / pxPerMm);
+        ctx.strokeStyle = (mmIndex % 10 === 0) ? '#d0d6e0' : '#eceff4';
+        ctx.lineWidth = (mmIndex % 10 === 0) ? 1.0 : 0.5;
         ctx.stroke();
       }
-      for (let y = 0; y <= H; y += pxPerMm) {
+      for (let y = 0; y <= H + 0.5; y += pxPerMm) {
         ctx.beginPath();
         ctx.moveTo(0, Math.round(y) + 0.5);
         ctx.lineTo(W, Math.round(y) + 0.5);
-        ctx.strokeStyle = (Math.round(y / pxPerMm) % 10 === 0) ? '#d0d6e0' : '#eceff4';
-        ctx.lineWidth = (Math.round(y / pxPerMm) % 10 === 0) ? 1.0 : 0.5;
+        const mmIndex = Math.round(y / pxPerMm);
+        ctx.strokeStyle = (mmIndex % 10 === 0) ? '#d0d6e0' : '#eceff4';
+        ctx.lineWidth = (mmIndex % 10 === 0) ? 1.0 : 0.5;
         ctx.stroke();
       }
 
-      // Axes au centre
+      // Axes centraux
       ctx.strokeStyle = '#9aa7b4';
       ctx.lineWidth = 1.2;
       ctx.beginPath();
@@ -288,29 +310,19 @@
       ctx.moveTo(0, Math.round(H/2)+0.5); ctx.lineTo(W, Math.round(H/2)+0.5);
       ctx.stroke();
 
-      // Règle en cm avec ticks mm (haut et gauche)
+      // Règle cm (haut et gauche) avec ticks mm
       ctx.strokeStyle = '#202730';
       ctx.fillStyle = '#202730';
       ctx.lineWidth = 1;
 
-      // Ticks verticaux en haut (le long de X)
+      // Ticks en haut (X)
       for (let cm = 0, x = 0; x <= W + 0.001; cm++, x = cm * pxPerCm) {
-        // tick cm
-        ctx.beginPath();
-        ctx.moveTo(Math.round(x)+0.5, 0);
-        ctx.lineTo(Math.round(x)+0.5, 10);
-        ctx.stroke();
-
-        // label cm
+        ctx.beginPath(); ctx.moveTo(Math.round(x)+0.5, 0); ctx.lineTo(Math.round(x)+0.5, 10); ctx.stroke();
         ctx.font = '10px system-ui, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'top';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'top';
         ctx.fillText(cm + ' cm', Math.round(x), 12);
-
-        // ticks mm entre deux cm
         for (let m = 1; m < 10; m++) {
-          const xm = x + m * pxPerMm;
-          if (xm > W) break;
+          const xm = x + m * pxPerMm; if (xm > W) break;
           ctx.beginPath();
           ctx.moveTo(Math.round(xm)+0.5, 0);
           ctx.lineTo(Math.round(xm)+0.5, m % 5 === 0 ? 8 : 5);
@@ -318,24 +330,14 @@
         }
       }
 
-      // Ticks horizontaux à gauche (le long de Y)
+      // Ticks à gauche (Y)
       for (let cm = 0, y = 0; y <= H + 0.001; cm++, y = cm * pxPerCm) {
-        // tick cm
-        ctx.beginPath();
-        ctx.moveTo(0, Math.round(y)+0.5);
-        ctx.lineTo(10, Math.round(y)+0.5);
-        ctx.stroke();
-
-        // label cm
+        ctx.beginPath(); ctx.moveTo(0, Math.round(y)+0.5); ctx.lineTo(10, Math.round(y)+0.5); ctx.stroke();
         ctx.font = '10px system-ui, sans-serif';
-        ctx.textAlign = 'left';
-        ctx.textBaseline = 'middle';
+        ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
         ctx.fillText(cm + ' cm', 12, Math.round(y));
-
-        // ticks mm entre deux cm
         for (let m = 1; m < 10; m++) {
-          const ym = y + m * pxPerMm;
-          if (ym > H) break;
+          const ym = y + m * pxPerMm; if (ym > H) break;
           ctx.beginPath();
           ctx.moveTo(0, Math.round(ym)+0.5);
           ctx.lineTo(m % 5 === 0 ? 8 : 5, Math.round(ym)+0.5);
@@ -344,29 +346,24 @@
       }
     }
 
-    // ----------- Slider : taille 1–5 cm -----------
+    // ---- Slider 1–5 cm (taille du symbole) ----
     const sizeRange = document.getElementById('sizeRange');
     const sizeValue = document.getElementById('sizeValue');
 
     function applySizeFromSlider() {
       const cm = Number(sizeRange.value);
-      // Mets à jour la variable CSS qui pilote la taille du symbole
       document.documentElement.style.setProperty('--code-size-cm', cm.toString());
-      // Met à jour l'affichage "X.X cm"
       sizeValue.textContent = cm.toFixed(1);
-      // Re-rendu du code
       renderAztec();
     }
-
     sizeRange.addEventListener('input', applySizeFromSlider);
 
-    // Rendu initial et sur resize/rotation
+    // Rendus initiaux + sur resize/rotation
     function renderAll() {
-      applySizeFromSlider(); // inclut renderAztec
+      applySizeFromSlider(); // met à jour et rend l'Aztec
       renderRuler();
     }
     renderAll();
-
     window.addEventListener('resize', () => {
       clearTimeout(window.__reflowTimer);
       window.__reflowTimer = setTimeout(renderAll, 120);
