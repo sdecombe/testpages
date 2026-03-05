@@ -1,10 +1,159 @@
 <!DOCTYPE html>
-<html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>QR code mobile</title>
+
+  <style>
+    :root {
+      color-scheme: light dark;
+      --bg: #f7f7f7;
+      --fg: #111;
+      --panel: #ffffff;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0f1115;
+        --fg: #e8e8e8;
+        --panel: #ffffff; /* garder le QR sur fond blanc pour un contraste optimal */
+      }
+    }
+
+    html, body {
+      height: 100%;
+      margin: 0;
+      background: var(--bg);
+      color: var(--fg);
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", sans-serif;
+    }
+
+    /* Mise en page verticale, QR en haut, texte en bas */
+    .page {
+      min-height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between; /* espace entre bloc QR et footer */
+      padding: env(safe-area-inset-top, 16px) 16px env(safe-area-inset-bottom, 24px);
+      box-sizing: border-box;
+    }
+
+    /* Conteneur du QR placé vers le haut avec une petite marge */
+    .qr-area {
+      width: 100%;
+      display: flex;
+      justify-content: center;
+      margin-top: 12px;  /* rapproche le QR du haut */
+    }
+
+    /* Bloc du QR : largeur fixe en centimètres, fond blanc + marge blanche */
+    .qr-box {
+      background: var(--panel);
+      /* Taille du QR : ~3 cm de large */
+      width: 3cm;
+      height: 3cm;
+      /* marge blanche autour du QR (padding interne) */
+      padding: 12px;
+      /* un léger arrondi + ombre douce pour lisibilité */
+      border-radius: 8px;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.08);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-sizing: content-box; /* pour que 3cm restent la zone du code, hors padding */
+    }
+
+    /* Le footer collé en bas */
+    footer {
+      width: 100%;
+      text-align: center;
+      font-size: 0.95rem;
+      line-height: 1.35;
+      opacity: 0.9;
+      padding-top: 8px;
+    }
+
+    /* Accessibilité : focus visibles si éléments interactifs ajoutés plus tard */
+    :focus-visible {
+      outline: 2px solid #4c9ffe;
+      outline-offset: 2px;
+      border-radius: 4px;
+    }
+  </style>
+</head>
 <body>
+  <main class="page">
+    <section class="qr-area" aria-label="Zone du QR code">
+      <div class="qr-box" id="qr-box" aria-live="polite" aria-label="QR code"></div>
+    </section>
 
-<h1>My First Heading</h1>
+    <footer id="footer-text">
+      Texte de bas de page
+    </footer>
+  </main>
 
-<p>My first paragraph.</p>
+  <!-- QRCode.js (librairie légère, MIT) via CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js" integrity="sha256-1Mqg7VcH5o6kO9M0xv0oO7c9qF3tB0Z1kA5VhFqoq6o=" crossorigin="anonymous"></script>
 
+  <script>
+    /**
+     * Paramètres à personnaliser
+     * - content: la donnée encodée (URL, texte, etc.)
+     * - footer: contenu affiché en bas de page
+     */
+    const settings = {
+      content: "QR_CONTENT_HERE", // ex: "https://exemple.com/inscription"
+      footer: "Texte de bas de page"
+    };
+
+    // Applique le texte du footer
+    document.getElementById("footer-text").textContent = settings.footer;
+
+    /**
+     * Génère le QR à l’intérieur du carré de 3 cm avec une marge blanche.
+     * La librairie prend une taille en pixels. On mesure la zone carrée en pixels
+     * puis on remplit au plus grand carré possible (en tenant compte du padding).
+     */
+    function renderQR() {
+      const box = document.getElementById("qr-box");
+
+      // Nettoyage si re-render
+      box.innerHTML = "";
+
+      // Mesure la place intérieure disponible
+      const rect = box.getBoundingClientRect();
+      // On retire le padding (12px de chaque côté)
+      const style = getComputedStyle(box);
+      const padX =
+        parseFloat(style.paddingLeft || 0) + parseFloat(style.paddingRight || 0);
+      const padY =
+        parseFloat(style.paddingTop || 0) + parseFloat(style.paddingBottom || 0);
+
+      const innerW = Math.max(0, rect.width - padX);
+      const innerH = Math.max(0, rect.height - padY);
+      const size = Math.floor(Math.max(0, Math.min(innerW, innerH)));
+
+      // Paramètres QR : niveau d’erreur élevé pour une meilleure robustesse
+      new QRCode(box, {
+        text: settings.content,
+        width: size,
+        height: size,
+        correctLevel: QRCode.CorrectLevel.H, // L, M, Q, H
+        colorDark: "#000000",
+        colorLight: "#ffffff"
+      });
+    }
+
+    // Render initial
+    renderQR();
+
+    // Re-rendre si rotation ou redimensionnement (au cas où)
+    window.addEventListener("resize", () => {
+      // petite temporisation pour laisser le layout se stabiliser
+      clearTimeout(window.__qrTimer);
+      window.__qrTimer = setTimeout(renderQR, 120);
+    });
+  </script>
 </body>
 </html>
