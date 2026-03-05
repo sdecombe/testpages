@@ -314,3 +314,195 @@
       return Math.max(widthPx, heightPx); // à scale=1 => = nombre de modules
     }
 
+    // Mesure px CSS par cm (pour convertir cm → px, puis px → pouces → mils)
+    function measurePxPerCm() {
+      const probe = document.createElement('div');
+      probe.style.position = 'absolute';
+      probe.style.left = '-9999px';
+      probe.style.top = '-9999px';
+      probe.style.width = '1cm';
+      probe.style.height = '1cm';
+      document.body.appendChild(probe);
+      const rect = probe.getBoundingClientRect();
+      document.body.removeChild(probe);
+      return rect.width; // px CSS pour 1 cm
+    }
+
+    // Rendu CB2D principal
+    function renderCB2D() {
+      const desiredCm = Number(sizeRange.value);
+      sizeValue.textContent = desiredCm.toFixed(1);
+
+      // Détermine contenu à partir du slider "octets"
+      const bytes = Number(bytesRange.value);
+      bytesValue.textContent = bytes;
+      const text = buildPayload(bytes);
+
+      // Choix du type CB2D (compact / normal)
+      const bcid = settings.compact ? 'azteccodecompact' : 'azteccode';
+
+      // 1) Mesurer le nombre de modules à scale=1
+      const modules = measureModulesCount(bcid, text);
+      if (!modules || modules <= 0) {
+        console.warn('Impossible de mesurer les modules, tentative avec valeur par défaut...');
+      }
+
+      // 2) Conversion cm -> px CSS, puis calcul du scale (px device / module)
+      const pxPerCm = measurePxPerCm();
+      const targetCssPx = desiredCm * pxPerCm;
+
+      const dpr = Math.max(1, window.devicePixelRatio || 1);
+      let scale = 1; // px device par module
+      if (modules && modules > 0) {
+        scale = Math.max(1, Math.floor((targetCssPx * dpr) / modules));
+      }
+
+      // 3) Taille device finale (au pixel près) et ajustement CSS exact
+      const deviceSizePx = modules ? modules * scale : Math.floor(targetCssPx * dpr);
+      const actualCssPx  = deviceSizePx / dpr;
+
+      // Fixe la taille CSS exacte du symbole pour éviter tout flou
+      codeBox.style.width  = actualCssPx + 'px';
+      codeBox.style.height = actualCssPx + 'px';
+
+      // Prépare le canvas en pixels device
+      canvas.width  = deviceSizePx;
+      canvas.height = deviceSizePx;
+      canvas.style.width  = actualCssPx + 'px';
+      canvas.style.height = actualCssPx + 'px';
+
+      const ctx = canvas.getContext('2d');
+      if (ctx && 'imageSmoothingEnabled' in ctx) {
+        ctx.imageSmoothingEnabled = false;
+      }
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // 4) Rendu CB2D définitif
+      try {
+        bwipjs.toCanvas(canvas, {
+          bcid,
+          text,
+          scale: scale,
+          padding: 0,
+          backgroundcolor: 'FFFFFF',
+          includetext: false
+          // eclevel: settings.eclevel // si vous souhaitez imposer un taux de redondance
+        });
+      } catch (err) {
+        console.error('Erreur rendu CB2D :', err);
+        ctx.fillStyle = '#d00';
+        ctx.font = Math.round(14 * (window.devicePixelRatio||1)) + 'px system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('Erreur CB2D', canvas.width/2, canvas.height/2);
+      }
+
+      // 5) Calcul de la taille d’un module en mils et affichage en bas de page
+      //    moduleCssPx = (pixels device / dpr) par module = scale / dpr
+      const moduleCssPx = scale / dpr;
+      const moduleCm = moduleCssPx / pxPerCm;
+      const moduleInches = moduleCm / 2.54;
+      const moduleMils = moduleInches * 1000;
+      footerEl.textContent = 'Module : ' + moduleMils.toFixed(1) + ' mils';
+    }
+
+    // Quadrillage / Règle
+    function renderRuler() {
+      const dpr = Math.max(1, window.devicePixelRatio || 1);
+      const rect = rulerCanvas.getBoundingClientRect();
+      rulerCanvas.width  = Math.floor(rect.width * dpr);
+      rulerCanvas.height = Math.floor(rect.height * dpr);
+      const ctx = rulerCanvas.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+      const W = rect.width, H = rect.height;
+
+      const pxPerCm = measurePxPerCm();
+      const pxPerMm = pxPerCm / 10;
+
+      // Fond
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, W, H);
+
+      // Quadrillage mm
+      for (let x = 0; x <= W + 0.5; x += pxPerMm) {
+        ctx.beginPath();
+        ctx.moveTo(Math.round(x) + 0.5, 0);
+        ctx.lineTo(Math.round(x) + 0.5, H);
+        const mmIndex = Math.round(x / pxPerMm);
+        ctx.strokeStyle = (mmIndex % 10 === 0) ? '#d0d6e0' : '#eceff4';
+        ctx.lineWidth = (mmIndex % 10 === 0) ? 1.0 : 0.5;
+        ctx.stroke();
+      }
+      for (let y = 0; y <= H + 0.5; y += pxPerMm) {
+        ctx.beginPath();
+        ctx.moveTo(0, Math.round(y) + 0.5);
+        ctx.lineTo(W, Math.round(y) + 0.5);
+        const mmIndex = Math.round(y / pxPerMm);
+        ctx.strokeStyle = (mmIndex % 10 === 0) ? '#d0d6e0' : '#eceff4';
+        ctx.lineWidth = (mmIndex % 10 === 0) ? 1.0 : 0.5;
+        ctx.stroke();
+      }
+
+      // Axes centraux
+      ctx.strokeStyle = '#9aa7b4';
+      ctx.lineWidth = 1.2;
+      ctx.beginPath();
+      ctx.moveTo(Math.round(W/2)+0.5, 0); ctx.lineTo(Math.round(W/2)+0.5, H);
+      ctx.moveTo(0, Math.round(H/2)+0.5); ctx.lineTo(W, Math.round(H/2)+0.5);
+      ctx.stroke();
+
+      // Règle cm (haut et gauche) avec ticks mm
+      ctx.strokeStyle = '#202730';
+      ctx.fillStyle = '#202730';
+      ctx.lineWidth = 1;
+
+      // Ticks en haut (X)
+      for (let cm = 0, x = 0; x <= W + 0.001; cm++, x = cm * pxPerCm) {
+        ctx.beginPath(); ctx.moveTo(Math.round(x)+0.5, 0); ctx.lineTo(Math.round(x)+0.5, 10); ctx.stroke();
+        ctx.font = '10px system-ui, sans-serif';
+        ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+        ctx.fillText(cm + ' cm', Math.round(x), 12);
+        for (let m = 1; m < 10; m++) {
+          const xm = x + m * (pxPerCm/10); if (xm > W) break;
+          ctx.beginPath();
+          ctx.moveTo(Math.round(xm)+0.5, 0);
+          ctx.lineTo(Math.round(xm)+0.5, m % 5 === 0 ? 8 : 5);
+          ctx.stroke();
+        }
+      }
+
+      // Ticks à gauche (Y)
+      for (let cm = 0, y = 0; y <= H + 0.001; cm++, y = cm * pxPerCm) {
+        ctx.beginPath(); ctx.moveTo(0, Math.round(y)+0.5); ctx.lineTo(10, Math.round(y)+0.5); ctx.stroke();
+        ctx.font = '10px system-ui, sans-serif';
+        ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+        ctx.fillText(cm + ' cm', 12, Math.round(y));
+        for (let m = 1; m < 10; m++) {
+          const ym = y + m * (pxPerCm/10); if (ym > H) break;
+          ctx.beginPath();
+          ctx.moveTo(0, Math.round(ym)+0.5);
+          ctx.lineTo(m % 5 === 0 ? 8 : 5, Math.round(ym)+0.5);
+          ctx.stroke();
+        }
+      }
+    }
+
+    // Handlers sliders
+    sizeRange.addEventListener('input', () => { renderCB2D(); });
+    bytesRange.addEventListener('input', () => { renderCB2D(); });
+
+    // Rendus initiaux + sur resize/rotation
+    function renderAll() {
+      renderCB2D();
+      renderRuler();
+    }
+    renderAll();
+    window.addEventListener('resize', () => {
+      clearTimeout(window.__reflowTimer);
+      window.__reflowTimer = setTimeout(renderAll, 120);
+    });
+  </script>
+</body>
+</html>
