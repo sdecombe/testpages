@@ -3,14 +3,14 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>Code Aztec mobile – taille réglable</title>
+  <title>CB2D (Aztec) – taille réglable, module en mils, volume de données</title>
 
   <style>
     :root {
       color-scheme: light dark;
       --bg: #f3f4f6;
       --fg: #111;
-      --code-size-cm: 3; /* taille du code-barres (1 à 5 cm), sans marge */
+      --code-size-cm: 3; /* taille cible du CB2D (1–5 cm), hors marge */
     }
     @media (prefers-color-scheme: dark) {
       :root {
@@ -27,7 +27,7 @@
       font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", sans-serif;
     }
 
-    /* Conteneur global */
+    /* Conteneur principal */
     .page {
       min-height: 100%;
       position: relative;
@@ -35,21 +35,21 @@
       flex-direction: column;
       align-items: center;
       justify-content: space-between;
-      padding: env(safe-area-inset-top, 12px) 16px env(safe-area-inset-bottom, 24px);
+      padding: env(safe-area-inset-top, 12px) 16px env(safe-area-inset-bottom, 16px);
       box-sizing: border-box;
       gap: 10px;
     }
 
-    /* Fond blanc sur la moitié supérieure (sous le contenu) */
+    /* Fond blanc sur la moitié supérieure */
     .page::before {
       content: "";
       position: absolute;
-      inset: 0 0 50% 0; /* haut: 0, bas: 50% -> moitié supérieure */
+      inset: 0 0 50% 0;   /* haut : 0, bas : 50% => moitié supérieure */
       background: #ffffff;
       z-index: 0;
     }
 
-    /* Couche de contenu au-dessus du fond */
+    /* Couche de contenu */
     .content {
       position: relative;
       z-index: 1;
@@ -60,10 +60,10 @@
       gap: 8px;
     }
 
-    /* Contrôles (slider) */
-    .controls {
+    /* Contrôles (haut) : taille du CB2D */
+    .controls-top {
       width: 100%;
-      max-width: 520px;
+      max-width: 560px;
       display: flex;
       align-items: center;
       gap: 10px;
@@ -71,20 +71,20 @@
       margin-top: 2px;
       flex-wrap: wrap;
     }
-    .controls label {
+    .controls-top label {
       font-size: 0.95rem;
       opacity: 0.9;
     }
-    .controls input[type="range"] {
+    .controls-top input[type="range"] {
       width: min(70vw, 360px);
     }
     .size-readout {
-      min-width: 4ch;
+      min-width: 5.5ch;
       text-align: right;
       font-variant-numeric: tabular-nums;
     }
 
-    /* Zone du code (vers le haut), sans marge autour du symbole */
+    /* Zone CB2D (en haut), sans marge autour du symbole */
     .code-area {
       width: 100%;
       display: flex;
@@ -92,23 +92,21 @@
       margin-top: 2px;
     }
     .code-box {
-      /* plus de padding, plus de fond : taille = symbole uniquement */
-      width: calc(var(--code-size-cm) * 1cm);
-      height: calc(var(--code-size-cm) * 1cm);
-      display: flex;
+      /* Pas de padding ni arrière-plan : la taille = symbole uniquement */
+      display: inline-flex;
       align-items: center;
       justify-content: center;
-      box-sizing: content-box; /* la taille CSS correspond au symbole */
+      box-sizing: content-box;
+      /* largeur/hauteur seront fixées en JS pour coller au pas de module */
     }
-    /* Le canvas occupe 100% de la boîte, sans marge */
-    canvas#aztec {
+    canvas#cb2d {
       display: block;
-      width: 100%;
-      height: 100%;
-      background: #ffffff; /* fond interne blanc si tu veux garantir un fond du symbole */
+      /* largeur/hauteur CSS sont pilotées en JS pour correspondre au rendu device */
+      image-rendering: pixelated; /* garde des arêtes nettes si mise à l’échelle CSS */
+      background: #ffffff;  /* fond du symbole */
     }
 
-    /* Quadrillage / règle au milieu */
+    /* Quadrillage / règle au milieu de page */
     .ruler-area {
       width: 100%;
       display: flex;
@@ -140,13 +138,42 @@
       display: block;
     }
 
+    /* Contrôle (bas) : volume de données */
+    .controls-bottom {
+      position: relative;
+      z-index: 1;
+      width: 100%;
+      max-width: 560px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      justify-content: center;
+      flex-wrap: wrap;
+      padding-top: 4px;
+    }
+    .controls-bottom label {
+      font-size: 0.95rem;
+      opacity: 0.9;
+    }
+    .controls-bottom input[type="range"] {
+      width: min(70vw, 360px);
+    }
+    .bytes-readout {
+      min-width: 7ch;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* Pied de page : affiche la taille d’un module en mils */
     footer {
+      position: relative;
+      z-index: 1;
       width: 100%;
       text-align: center;
       font-size: 0.95rem;
       line-height: 1.35;
-      opacity: 0.9;
-      padding-top: 8px;
+      opacity: 0.95;
+      padding-top: 2px;
     }
 
     :focus-visible {
@@ -159,17 +186,17 @@
 <body>
   <main class="page">
     <div class="content">
-      <!-- Contrôle de taille -->
-      <div class="controls" aria-label="Réglage de la taille du code Aztec">
-        <label for="sizeRange">Taille du code :</label>
+      <!-- Contrôle haut : taille du CB2D -->
+      <div class="controls-top" aria-label="Réglage de la taille du CB2D">
+        <label for="sizeRange">Taille du CB2D :</label>
         <input id="sizeRange" type="range" min="1" max="5" step="0.1" value="3" />
         <span class="size-readout"><span id="sizeValue">3.0</span> cm</span>
       </div>
 
-      <!-- Code Aztec (en haut) -->
-      <section class="code-area" aria-label="Zone du code Aztec">
+      <!-- Symbole CB2D (en haut) -->
+      <section class="code-area" aria-label="Zone du CB2D (Aztec)">
         <div class="code-box" id="code-box">
-          <canvas id="aztec"></canvas>
+          <canvas id="cb2d"></canvas>
         </div>
       </section>
 
@@ -180,194 +207,110 @@
           <canvas id="ruler"></canvas>
         </div>
       </section>
+
+      <!-- Contrôle bas : volume de données -->
+      <div class="controls-bottom" aria-label="Réglage du volume de données du CB2D">
+        <label for="bytesRange">Volume de données :</label>
+        <input id="bytesRange" type="range" min="10" max="512" step="1" value="64" />
+        <span class="bytes-readout"><span id="bytesValue">64</span> octets</span>
+      </div>
     </div>
 
-    <footer id="footer-text">Texte de bas de page</footer>
+    <!-- Pied de page : taille de module en mils -->
+    <footer id="footer-text">Module : — mils</footer>
   </main>
 
-  <!-- bwip-js (génération Aztec côté client) -->
+  <!-- bwip-js (génération CB2D/Aztec) -->
   <script src="https://unpkg.com/bwip-js/dist/bwip-js-min.js"></script>
 
   <script>
     /**
-     * Paramètres à ajuster
-     * - content : la donnée encodée (URL, texte, etc.)
-     * - footer  : texte de bas de page
-     * - compact : true pour Aztec compact
+     * Paramètres initiaux
+     * - compact : true => CB2D compact (capacité réduite, symbole plus petit)
+     * - eclevel : pour Aztec, on peut forcer un pourcentage si besoin (optionnel)
      */
     const settings = {
-      content: "AZTEC_CONTENT_HERE",  // ex: "https://exemple.com/checkin"
-      footer: "Texte de bas de page",
+      content: "CB2D_CONTENT_PLACEHOLDER",
       compact: false
+      // eclevel: '23' // exemple : 23% si vous voulez forcer (optionnel)
     };
 
-    // Met le footer
-    document.getElementById("footer-text").textContent = settings.footer;
+    // Éléments UI
+    const sizeRange  = document.getElementById('sizeRange');
+    const sizeValue  = document.getElementById('sizeValue');
+    const bytesRange = document.getElementById('bytesRange');
+    const bytesValue = document.getElementById('bytesValue');
+    const footerEl   = document.getElementById('footer-text');
 
-    // ---- Rendu du code Aztec (taille = symbole seulement) ----
-    function renderAztec() {
-      const canvas = document.getElementById('aztec');
-      const box = document.getElementById('code-box');
+    // Canvases / conteneurs
+    const canvas = document.getElementById('cb2d');
+    const codeBox = document.getElementById('code-box');
 
-      // Taille cible en px CSS (sans marge)
-      const rect = box.getBoundingClientRect();
-      const sizeCss = Math.floor(Math.min(rect.width, rect.height));
+    // Règle (quadrillage)
+    const rulerCanvas = document.getElementById('ruler');
 
-      // Haute densité
-      const dpr = Math.max(1, window.devicePixelRatio || 1);
-      canvas.width  = Math.floor(sizeCss * dpr);
-      canvas.height = Math.floor(sizeCss * dpr);
-      canvas.style.width  = sizeCss + 'px';
-      canvas.style.height = sizeCss + 'px';
+    // Génère un payload de N octets (ASCII visibles, 1 octet par caractère)
+    function buildPayload(n) {
+      // ASCII 33..126 (94 caractères), cyclés
+      let s = '';
+      for (let i = 0; i < n; i++) {
+        s += String.fromCharCode(33 + (i % 94));
+      }
+      return s;
+    }
 
-      // Choix du symbole
-      const bcid = settings.compact ? 'azteccodecompact' : 'azteccode';
-
-      // Efface le canvas
-      const ctx = canvas.getContext('2d');
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    // Mesure le nombre de modules (carrés) du CB2D en rendant à scale=1 (pas de marge)
+    function measureModulesCount(bcid, text) {
+      // Canvas temporaire suffisamment grand
+      const tmp = document.createElement('canvas');
+      tmp.width = 600;  // suffisant pour CB2D jusqu’aux grandes tailles
+      tmp.height = 600;
+      const tctx = tmp.getContext('2d', { willReadFrequently: true });
+      // Fond blanc
+      tctx.fillStyle = '#fff';
+      tctx.fillRect(0, 0, tmp.width, tmp.height);
 
       try {
-        // Pas de padding interne : taille exacte du symbole
-        // On ajuste l'échelle pour remplir le carré cible
-        const scale = Math.max(2, Math.floor((sizeCss * dpr) / 120));
-
-        bwipjs.toCanvas(canvas, {
+        bwipjs.toCanvas(tmp, {
           bcid,
-          text: settings.content,
-          scale: scale,
-          padding: 0,               // *** aucune marge ajoutée ***
+          text,
+          scale: 1,         // 1 pixel par module
+          padding: 0,       // aucune marge
           backgroundcolor: 'FFFFFF',
           includetext: false
         });
-      } catch (err) {
-        console.error('Erreur bwip-js:', err);
-        ctx.fillStyle = '#fff';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = '#d00';
-        ctx.font = (14 * dpr) + 'px system-ui, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('Erreur Aztec', canvas.width/2, canvas.height/2);
-      }
-    }
-
-    // ---- Quadrillage / Règle ----
-    function renderRuler() {
-      const canvas = document.getElementById('ruler');
-      const dpr = Math.max(1, window.devicePixelRatio || 1);
-      const rect = canvas.getBoundingClientRect();
-      canvas.width  = Math.floor(rect.width * dpr);
-      canvas.height = Math.floor(rect.height * dpr);
-      const ctx = canvas.getContext('2d');
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-      const W = rect.width;
-      const H = rect.height;
-
-      // Mesure CSS de 1cm -> pixels
-      const probe = document.createElement('div');
-      probe.style.position = 'absolute';
-      probe.style.left = '-9999px';
-      probe.style.top = '-9999px';
-      probe.style.width = '1cm';
-      probe.style.height = '1cm';
-      document.body.appendChild(probe);
-      const cmRect = probe.getBoundingClientRect();
-      document.body.removeChild(probe);
-      const pxPerCm = cmRect.width;
-      const pxPerMm = pxPerCm / 10;
-
-      // Fond
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, W, H);
-
-      // Quadrillage mm
-      for (let x = 0; x <= W + 0.5; x += pxPerMm) {
-        ctx.beginPath();
-        ctx.moveTo(Math.round(x) + 0.5, 0);
-        ctx.lineTo(Math.round(x) + 0.5, H);
-        const mmIndex = Math.round(x / pxPerMm);
-        ctx.strokeStyle = (mmIndex % 10 === 0) ? '#d0d6e0' : '#eceff4';
-        ctx.lineWidth = (mmIndex % 10 === 0) ? 1.0 : 0.5;
-        ctx.stroke();
-      }
-      for (let y = 0; y <= H + 0.5; y += pxPerMm) {
-        ctx.beginPath();
-        ctx.moveTo(0, Math.round(y) + 0.5);
-        ctx.lineTo(W, Math.round(y) + 0.5);
-        const mmIndex = Math.round(y / pxPerMm);
-        ctx.strokeStyle = (mmIndex % 10 === 0) ? '#d0d6e0' : '#eceff4';
-        ctx.lineWidth = (mmIndex % 10 === 0) ? 1.0 : 0.5;
-        ctx.stroke();
+      } catch (e) {
+        console.error('Erreur mesure modules (rendu scale=1) :', e);
+        return null;
       }
 
-      // Axes centraux
-      ctx.strokeStyle = '#9aa7b4';
-      ctx.lineWidth = 1.2;
-      ctx.beginPath();
-      ctx.moveTo(Math.round(W/2)+0.5, 0); ctx.lineTo(Math.round(W/2)+0.5, H);
-      ctx.moveTo(0, Math.round(H/2)+0.5); ctx.lineTo(W, Math.round(H/2)+0.5);
-      ctx.stroke();
+      const img = tctx.getImageData(0, 0, tmp.width, tmp.height).data;
 
-      // Règle cm (haut et gauche) avec ticks mm
-      ctx.strokeStyle = '#202730';
-      ctx.fillStyle = '#202730';
-      ctx.lineWidth = 1;
+      // Recherche de la bounding-box non-blanche (luminance < 250) pour trouver le symbole
+      const isWhite = (r,g,b) => (r + g + b) >= (250 * 3);
 
-      // Ticks en haut (X)
-      for (let cm = 0, x = 0; x <= W + 0.001; cm++, x = cm * pxPerCm) {
-        ctx.beginPath(); ctx.moveTo(Math.round(x)+0.5, 0); ctx.lineTo(Math.round(x)+0.5, 10); ctx.stroke();
-        ctx.font = '10px system-ui, sans-serif';
-        ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-        ctx.fillText(cm + ' cm', Math.round(x), 12);
-        for (let m = 1; m < 10; m++) {
-          const xm = x + m * pxPerMm; if (xm > W) break;
-          ctx.beginPath();
-          ctx.moveTo(Math.round(xm)+0.5, 0);
-          ctx.lineTo(Math.round(xm)+0.5, m % 5 === 0 ? 8 : 5);
-          ctx.stroke();
+      let minX = tmp.width, minY = tmp.height, maxX = -1, maxY = -1;
+      for (let y = 0; y < tmp.height; y++) {
+        for (let x = 0; x < tmp.width; x++) {
+          const idx = (y * tmp.width + x) * 4;
+          const r = img[idx], g = img[idx+1], b = img[idx+2];
+          if (!isWhite(r,g,b)) {
+            if (x < minX) minX = x;
+            if (y < minY) minY = y;
+            if (x > maxX) maxX = x;
+            if (y > maxY) maxY = y;
+          }
         }
       }
 
-      // Ticks à gauche (Y)
-      for (let cm = 0, y = 0; y <= H + 0.001; cm++, y = cm * pxPerCm) {
-        ctx.beginPath(); ctx.moveTo(0, Math.round(y)+0.5); ctx.lineTo(10, Math.round(y)+0.5); ctx.stroke();
-        ctx.font = '10px system-ui, sans-serif';
-        ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-        ctx.fillText(cm + ' cm', 12, Math.round(y));
-        for (let m = 1; m < 10; m++) {
-          const ym = y + m * pxPerMm; if (ym > H) break;
-          ctx.beginPath();
-          ctx.moveTo(0, Math.round(ym)+0.5);
-          ctx.lineTo(m % 5 === 0 ? 8 : 5, Math.round(ym)+0.5);
-          ctx.stroke();
-        }
+      if (maxX < 0 || maxY < 0) {
+        // rien trouvé
+        return null;
       }
+
+      const widthPx  = maxX - minX + 1;
+      const heightPx = maxY - minY + 1;
+      // Le symbole est carré : prendre le max par sécurité
+      return Math.max(widthPx, heightPx); // à scale=1 => = nombre de modules
     }
 
-    // ---- Slider 1–5 cm (taille du symbole) ----
-    const sizeRange = document.getElementById('sizeRange');
-    const sizeValue = document.getElementById('sizeValue');
-
-    function applySizeFromSlider() {
-      const cm = Number(sizeRange.value);
-      document.documentElement.style.setProperty('--code-size-cm', cm.toString());
-      sizeValue.textContent = cm.toFixed(1);
-      renderAztec();
-    }
-    sizeRange.addEventListener('input', applySizeFromSlider);
-
-    // Rendus initiaux + sur resize/rotation
-    function renderAll() {
-      applySizeFromSlider(); // met à jour et rend l'Aztec
-      renderRuler();
-    }
-    renderAll();
-    window.addEventListener('resize', () => {
-      clearTimeout(window.__reflowTimer);
-      window.__reflowTimer = setTimeout(renderAll, 120);
-    });
-  </script>
-</body>
-</html>
