@@ -3,20 +3,20 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>QR code mobile</title>
+  <title>Code Aztec mobile</title>
 
   <style>
     :root {
       color-scheme: light dark;
       --bg: #f7f7f7;
       --fg: #111;
-      --panel: #ffffff;
+      --panel: #ffffff; /* garder le code sur fond blanc pour une lisibilité optimale */
     }
     @media (prefers-color-scheme: dark) {
       :root {
         --bg: #0f1115;
         --fg: #e8e8e8;
-        --panel: #ffffff; /* garder le QR sur fond blanc pour un contraste optimal */
+        --panel: #ffffff;
       }
     }
 
@@ -28,43 +28,43 @@
       font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", sans-serif;
     }
 
-    /* Mise en page verticale, QR en haut, texte en bas */
     .page {
       min-height: 100%;
       display: flex;
       flex-direction: column;
       align-items: center;
-      justify-content: space-between; /* espace entre bloc QR et footer */
+      justify-content: space-between;
       padding: env(safe-area-inset-top, 16px) 16px env(safe-area-inset-bottom, 24px);
       box-sizing: border-box;
     }
 
-    /* Conteneur du QR placé vers le haut avec une petite marge */
-    .qr-area {
+    .code-area {
       width: 100%;
       display: flex;
       justify-content: center;
-      margin-top: 12px;  /* rapproche le QR du haut */
+      margin-top: 12px; /* rapproche du haut */
     }
 
-    /* Bloc du QR : largeur fixe en centimètres, fond blanc + marge blanche */
-    .qr-box {
+    /* Boîte du code : zone carrée ~3cm avec marge blanche intérieure */
+    .code-box {
       background: var(--panel);
-      /* Taille du QR : ~3 cm de large */
-      width: 3cm;
+      width: 3cm;  /* taille visuelle cible */
       height: 3cm;
-      /* marge blanche autour du QR (padding interne) */
-      padding: 12px;
-      /* un léger arrondi + ombre douce pour lisibilité */
-      border-radius: 8px;
+      padding: 12px;              /* marge blanche autour du symbole */
+      border-radius: 8px;         /* optionnel (arrondi léger) */
       box-shadow: 0 4px 14px rgba(0,0,0,0.08);
       display: flex;
       align-items: center;
       justify-content: center;
-      box-sizing: content-box; /* pour que 3cm restent la zone du code, hors padding */
+      box-sizing: content-box;    /* 3cm = zone du symbole, padding en plus */
     }
 
-    /* Le footer collé en bas */
+    canvas {
+      display: block;
+      width: 100%;      /* s’adapte à la boîte */
+      height: 100%;
+    }
+
     footer {
       width: 100%;
       text-align: center;
@@ -73,86 +73,105 @@
       opacity: 0.9;
       padding-top: 8px;
     }
-
-    /* Accessibilité : focus visibles si éléments interactifs ajoutés plus tard */
-    :focus-visible {
-      outline: 2px solid #4c9ffe;
-      outline-offset: 2px;
-      border-radius: 4px;
-    }
   </style>
 </head>
 <body>
   <main class="page">
-    <section class="qr-area" aria-label="Zone du QR code">
-      <div class="qr-box" id="qr-box" aria-live="polite" aria-label="QR code"></div>
+    <section class="code-area" aria-label="Zone du code Aztec">
+      <div class="code-box" id="code-box">
+        <canvas id="aztec"></canvas>
+      </div>
     </section>
 
-    <footer id="footer-text">
-      Texte de bas de page
-    </footer>
+    <footer id="footer-text">Texte de bas de page</footer>
   </main>
 
-  <!-- QRCode.js (librairie légère, MIT) via CDN -->
-  <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js" crossorigin="anonymous"></script>
+  <!-- bwip-js (génération Aztec côté client) -->
+  <script src="https://unpkg.com/bwip-js/dist/bwip-js-min.js"></script>
 
   <script>
     /**
      * Paramètres à personnaliser
-     * - content: la donnée encodée (URL, texte, etc.)
-     * - footer: contenu affiché en bas de page
+     * - content : la donnée encodée (URL, texte, payload binaire encodé en texte, etc.)
+     * - footer  : texte affiché en bas de page
+     * - compact : true pour Aztec compact (plus petit, capacité réduite)
      */
     const settings = {
-      content: "QR_CONTENT_HERE", // ex: "https://exemple.com/inscription"
-      footer: "Texte de bas de page"
+      content: "AZTEC_CONTENT_HERE", // ex: "https://exemple.com/checkin"
+      footer: "Texte de bas de page",
+      compact: false
     };
 
-    // Applique le texte du footer
     document.getElementById("footer-text").textContent = settings.footer;
 
     /**
-     * Génère le QR à l’intérieur du carré de 3 cm avec une marge blanche.
-     * La librairie prend une taille en pixels. On mesure la zone carrée en pixels
-     * puis on remplit au plus grand carré possible (en tenant compte du padding).
+     * Rendu haute définition :
+     * - Le canvas CSS fait ~3cm ; on multiplie la résolution réelle par devicePixelRatio
+     *   pour un rendu net sur écrans haute densité.
+     * - La marge blanche est gérée par le padding de .code-box et 'padding' de bwip-js.
      */
-    function renderQR() {
-      const box = document.getElementById("qr-box");
+    function renderAztec() {
+      const canvas = document.getElementById('aztec');
+      const box = document.getElementById('code-box');
 
-      // Nettoyage si re-render
-      box.innerHTML = "";
-
-      // Mesure la place intérieure disponible
+      // Taille intérieure disponible (en CSS px)
       const rect = box.getBoundingClientRect();
-      // On retire le padding (12px de chaque côté)
       const style = getComputedStyle(box);
-      const padX =
-        parseFloat(style.paddingLeft || 0) + parseFloat(style.paddingRight || 0);
-      const padY =
-        parseFloat(style.paddingTop || 0) + parseFloat(style.paddingBottom || 0);
-
+      const padX = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
+      const padY = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
       const innerW = Math.max(0, rect.width - padX);
       const innerH = Math.max(0, rect.height - padY);
-      const size = Math.floor(Math.max(0, Math.min(innerW, innerH)));
+      const size = Math.floor(Math.min(innerW, innerH));
 
-      // Paramètres QR : niveau d’erreur élevé pour une meilleure robustesse
-      new QRCode(box, {
-        text: settings.content,
-        width: size,
-        height: size,
-        correctLevel: QRCode.CorrectLevel.H, // L, M, Q, H
-        colorDark: "#000000",
-        colorLight: "#ffffff"
-      });
+      // Échelle haute densité
+      const dpr = Math.max(1, window.devicePixelRatio || 1);
+      canvas.width  = Math.floor(size * dpr);
+      canvas.height = Math.floor(size * dpr);
+
+      // Adapter la taille CSS au conteneur
+      canvas.style.width  = size + 'px';
+      canvas.style.height = size + 'px';
+
+      // Paramètres bwip-js
+      const bcid = settings.compact ? 'azteccodecompact' : 'azteccode';
+
+      try {
+        // On estime une échelle (pixels/module) à partir de la taille cible.
+        // On laisse bwip-js calculer automatiquement la matrice, et on ajuste
+        // l'échelle pour remplir le carré. On peut aussi laisser bwip-js
+        // auto-sizer en fournissant width/height, mais scale est plus simple ici.
+        // On démarre avec une échelle et on laisse bwip-js ajuster.
+        // Nota : padding interne du symbole (zones blanches supplémentaires).
+        bwipjs.toCanvas(canvas, {
+          bcid,                 // 'azteccode' ou 'azteccodecompact'
+          text: settings.content,
+          scale: Math.max(2, Math.floor((size * dpr) / 120)), // heuristique pour remplir la zone
+          padding: 8,           // marge blanche interne au symbole
+          backgroundcolor: 'FFFFFF',
+          includetext: false    // pas de texte sous le code
+          // options avancées possibles :
+          // eclevel: '23', // pour Aztec, spécifie le pourcentage de corrections (si nécessaire)
+          // format: 'full' ou 'compact' est géré par bcid
+        });
+      } catch (err) {
+        console.error('Erreur bwip-js:', err);
+        // Fallback minimal
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#d00';
+        ctx.font = (14 * dpr) + 'px system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('Erreur génération Aztec', canvas.width/2, canvas.height/2);
+      }
     }
 
-    // Render initial
-    renderQR();
-
-    // Re-rendre si rotation ou redimensionnement (au cas où)
-    window.addEventListener("resize", () => {
-      // petite temporisation pour laisser le layout se stabiliser
-      clearTimeout(window.__qrTimer);
-      window.__qrTimer = setTimeout(renderQR, 120);
+    // Rendu initial et sur resize/rotation
+    renderAztec();
+    window.addEventListener('resize', () => {
+      clearTimeout(window.__azTimer);
+      window.__azTimer = setTimeout(renderAztec, 120);
     });
   </script>
 </body>
