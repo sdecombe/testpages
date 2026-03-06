@@ -3,179 +3,119 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>CB2D (Aztec) – taille fixe, modules exacts (déf. C), calibrage</title>
-
+  <title>CB2D (Aztec) — taille fixe, modules exacts, calibrage</title>
   <style>
-    :root {
+    :root{
       color-scheme: light dark;
-      --bg: #0d1117;
-      --fg: #e6edf3;
-      --panel: #11161c;
-      --panel-2: #0b0f14;
-      --accent: #3ea6ff;
-      --top-bg: #ffffff;      /* fond blanc, moitié supérieure */
-      --error-bg: #3b0d0d;    /* rouge sombre si <1 px/module */
-      --anchor-cb2d-y: 28vh;  /* centre vertical CB2D (tiers sup.) */
-      --anchor-ruler-y: 60vh; /* centre vertical règle */
-      --size-cm: 3;           /* taille cible du symbole (1–5 cm) */
+      --bg:#0d1117; --fg:#e6edf3;
+      --panel:#11161c; --panel-2:#0b0f14;
+      --accent:#3ea6ff;
+      --top-bg:#ffffff;               /* fond blanc moitié supérieure */
+      --error-bg:#3b0d0d;             /* <1 px/module */
+      --size-cm:3;                    /* slider 1–5 cm */
+    }
+    html,body{height:100%;margin:0;background:var(--bg);color:var(--fg);
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+    /* Mise en page sans overlay (tout en flux) + fond blanc moitié haute */
+    .page{
+      min-height:100dvh; position:relative;
+      display:grid; gap:14px;
+      grid-template-rows: 36vh auto auto auto; /* CB2D | règle | contrôles | footer */
+      padding: env(safe-area-inset-top,10px) 12px env(safe-area-inset-bottom,12px);
+      box-sizing:border-box;
+    }
+    .page::before{
+      content:""; position:absolute; inset:0 0 50% 0; background:var(--top-bg); z-index:0;
+    }
+    .zone{ position:relative; z-index:1; }
+    .zone-top{ display:flex; align-items:center; justify-content:center; } /* centre HV */
+    .cb2d-wrap{
+      display:inline-flex; align-items:center; justify-content:center;
+      border-radius:10px; background:transparent;
+      box-shadow:0 8px 28px rgba(0,0,0,.25);
+      transition:background-color 120ms ease;
+    }
+    canvas#cb2d{
+      display:block; background:#fff; image-rendering:pixelated; /* bords nets */
     }
 
-    html, body {
-      height: 100%;
-      margin: 0;
-      background: var(--bg);
-      color: var(--fg);
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", sans-serif;
+    /* Règle */
+    .zone-ruler{ display:flex; justify-content:center; }
+    .ruler-wrap{
+      position:relative; width:min(92vw,560px); aspect-ratio:2/1;
+      background:#fff; color:#111; border-radius:10px;
+      box-shadow:inset 0 3px 12px rgba(0,0,0,.08), 0 8px 24px rgba(0,0,0,.18);
+      overflow:hidden;
     }
+    .ruler-title{ position:absolute; top:6px; left:10px; font-size:.8rem; opacity:.8; color:#111; user-select:none }
+    canvas#ruler{ width:100%; height:100%; display:block; }
 
-    /* Scène + fond blanc moitié supérieure */
-    .stage {
-      position: relative;
-      min-height: 100dvh;
-      padding: env(safe-area-inset-top, 8px) 12px env(safe-area-inset-bottom, 12px);
-      box-sizing: border-box;
+    /* Contrôles lisibles (opaques, en flux) */
+    .controls{
+      background:var(--panel); border:1px solid #1f2a34; border-radius:12px;
+      box-shadow:0 10px 32px rgba(0,0,0,.45);
+      padding:12px 14px; display:grid; gap:12px; justify-items:center;
     }
-    .stage::before {
-      content: "";
-      position: absolute;
-      left: 0; right: 0; top: 0; height: 50%;
-      background: var(--top-bg);
-      z-index: 0;
+    .row{ width:100%; max-width:720px; display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:center }
+    label{ font-size:.95rem; opacity:.95 }
+    input[type="range"]{ width:min(72vw,480px); accent-color:var(--accent) }
+    .readout, .pill{
+      font-variant-numeric:tabular-nums; color:#cfe8ff; background:var(--panel-2);
+      padding:2px 8px; border-radius:8px; border:1px solid #1f2a34;
     }
+    .readout{ min-width:6.2ch; text-align:right }
+    .pill{ white-space:nowrap }
 
-    /* Ancrages à position fixe (centre absolu HV) */
-    .anchor {
-      position: absolute;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      z-index: 1;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+    /* Profil + Calibrage étendu */
+    .cal-block{
+      width:100%; max-width:760px; background:var(--panel);
+      border:1px solid #1f2a34; border-radius:12px; padding:10px 12px;
+      display:grid; gap:10px;
     }
-    .anchor.cb2d { top: var(--anchor-cb2d-y); }
-    .anchor.ruler { top: var(--anchor-ruler-y); width: min(92vw, 560px); }
+    .cal-controls{ display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:center }
+    select, input[type="number"]{
+      background:var(--panel-2); color:var(--fg); border:1px solid #1f2a34; border-radius:8px; padding:6px 8px
+    }
+    .bar-row{ display:flex; gap:12px; align-items:center; justify-content:center; flex-wrap:wrap }
+    .bar{ position:relative; height:16px; border-radius:8px; background:linear-gradient(90deg,#4b9ef7,#1663c7);
+      box-shadow:inset 0 2px 6px rgba(0,0,0,.25) }
+    .bar-ends{ position:absolute; top:-8px; bottom:-8px; left:0; right:0; border-left:2px solid #111; border-right:2px solid #111; opacity:.85; pointer-events:none }
 
-    /* CB2D : conteneur à taille physique FIXE (calibrée) */
-    .cb2d-wrap {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      background: transparent;     /* passe en rouge sombre si <1 px/module */
-      border-radius: 10px;
-      transition: background-color 120ms ease;
-      box-shadow: 0 8px 28px rgba(0,0,0,0.25);
-    }
-    canvas#cb2d {
-      display: block;
-      background: #ffffff;         /* fond interne du symbole pour contraste */
-      image-rendering: pixelated;  /* nearest-neighbor : bords nets */
-    }
-
-    /* Règle / quadrillage */
-    .ruler-wrap {
-      position: relative;
-      width: 100%;
-      aspect-ratio: 2 / 1;
-      background: #fff;
-      color: #111;
-      border-radius: 10px;
-      box-shadow: inset 0 3px 12px rgba(0,0,0,0.08), 0 8px 24px rgba(0,0,0,0.18);
-      overflow: hidden;
-    }
-    .ruler-title {
-      position: absolute;
-      top: 6px; left: 10px;
-      font-size: 0.8rem; opacity: 0.8; user-select: none; pointer-events: none;
-      color: #111;
-    }
-    canvas#ruler { width: 100%; height: 100%; display: block; }
-
-    /* Panneau des contrôles (lisible) */
-    .controls {
-      position: absolute;
-      left: 50%; bottom: 12px; transform: translateX(-50%);
-      width: min(96vw, 720px);
-      z-index: 2;
-      display: grid; gap: 10px; justify-items: center;
-      background: rgba(17, 22, 28, 0.9);
-      border: 1px solid #1f2a34;
-      border-radius: 14px; padding: 12px 14px;
-      box-shadow: 0 10px 32px rgba(0,0,0,0.45);
-    }
-    .row {
-      width: 100%; max-width: 700px;
-      display: flex; gap: 12px; align-items: center; justify-content: center; flex-wrap: wrap;
-    }
-    label { font-size: 0.95rem; opacity: 0.95; }
-    input[type="range"] {
-      width: min(72vw, 420px);
-      accent-color: var(--accent);
-    }
-    .readout, .readout-short {
-      font-variant-numeric: tabular-nums;
-      color: #cfe8ff;
-      background: var(--panel-2);
-      padding: 2px 8px; border-radius: 8px; border: 1px solid #1f2a34;
-    }
-    .readout { min-width: 7.5ch; text-align: right; }
-    .readout-short { min-width: 5.2ch; text-align: right; }
-
-    /* Calibrage */
-    details.cal {
-      width: 100%; max-width: 720px; background: var(--panel); border: 1px solid #1f2a34; border-radius: 12px;
-      padding: 10px 12px; color: var(--fg);
-    }
-    .cal-row { display: flex; gap: 10px; align-items: center; justify-content: center; flex-wrap: wrap; margin-top: 6px; }
-    .bar-5cm { position: relative; height: 14px; border-radius: 7px; background: linear-gradient(90deg,#4b9ef7,#1663c7); box-shadow: 0 2px 6px rgba(0,0,0,0.25) inset; }
-    .bar-ends { position: absolute; top: -8px; bottom: -8px; left: 0; right: 0; border-left: 2px solid #111; border-right: 2px solid #111; opacity: 0.8; pointer-events: none; }
-    .cal-note { font-size: 0.85rem; opacity: 0.85; text-align: center; margin-top: 4px; }
-
-    /* Footer info (lisible, pas de chevauchement) */
-    footer {
-      position: absolute; left: 50%; transform: translateX(-50%);
-      bottom: calc(12px + 126px);  /* au‑dessus du panneau */
-      width: min(96vw, 720px);
-      text-align: center; font-size: 0.95rem; line-height: 1.35;
-      z-index: 2;
-      color: #e6edf3;
-      background: rgba(17,22,28,0.86);
-      border: 1px solid #1f2a34;
-      border-radius: 10px;
-      padding: 6px 10px;
-      box-shadow: 0 10px 32px rgba(0,0,0,0.35);
+    /* Footer lisible en bas, sans chevauchement */
+    footer{
+      background:var(--panel); border:1px solid #1f2a34; border-radius:10px;
+      padding:8px 10px; text-align:center;
+      box-shadow:0 10px 32px rgba(0,0,0,.35);
+      color:#e6edf3;
     }
   </style>
 </head>
 <body>
-  <main class="stage">
-    <!-- CB2D : centre fixe (tiers supérieur) -->
-    <div class="anchor cb2d" id="cb2dAnchor">
-      <div class="cb2d-wrap" id="cb2dWrap">
+  <main class="page">
+    <!-- CB2D (centre HV dans la zone supérieure) -->
+    <section class="zone zone-top" aria-label="CB2D">
+      <div id="cb2dWrap" class="cb2d-wrap">
         <canvas id="cb2d"></canvas>
       </div>
-    </div>
+    </section>
 
-    <!-- Règle / quadrillage : centre fixe -->
-    <div class="anchor ruler">
+    <!-- Règle / quadrillage (centre fixe de sa zone) -->
+    <section class="zone zone-ruler" aria-label="Quadrillage et règle">
       <div class="ruler-wrap">
         <div class="ruler-title">Quadrillage / règle (mm & cm)</div>
         <canvas id="ruler"></canvas>
       </div>
-    </div>
+    </section>
 
-    <!-- Contrôles lisibles -->
-    <section class="controls" aria-label="Contrôles">
+    <!-- Contrôles -->
+    <section class="zone controls" aria-label="Contrôles">
+      <!-- 1) Taille (unique) + Octets -->
       <div class="row">
         <label for="sizeRange">Taille</label>
         <input id="sizeRange" type="range" min="1" max="5" step="0.1" value="3" />
-        <span class="readout-short"><span id="sizeValue">3.0</span> cm</span>
+        <span class="readout"><span id="sizeValue">3.0</span> cm</span>
 
-        <span style="width: 12px;"></span>
-
-        <label for="milsRange">Mils/mod</label>
-        <input id="milsRange" type="range" min="2" max="50" step="0.1" value="10" />
-        <span class="readout"><span id="milsValue">10.0</span> mils</span>
+        <span class="pill" id="derivedInfo">—</span>
       </div>
 
       <div class="row">
@@ -184,22 +124,35 @@
         <span class="readout"><span id="bytesValue">64</span></span>
       </div>
 
-      <details class="cal">
-        <summary><strong>Calibrage (réglez si la règle ne colle pas au mètre)</strong></summary>
-        <div class="cal-row">
-          <div>Facteur</div>
-          <input id="calRange" type="range" min="0.80" max="1.20" step="0.001" value="1.000" />
-          <span class="readout"><span id="calValue">1.000</span>×</span>
-          <button id="calReset" type="button">Réinitialiser</button>
+      <!-- 2) Profil + Calibrage -->
+      <div class="cal-block" aria-label="Profil & calibrage">
+        <div class="cal-controls">
+          <label for="profileSel">Profil</label>
+          <select id="profileSel">
+            <option value="motoG7">Moto G7 (défaut)</option>
+            <option value="custom">Personnalisé</option>
+          </select>
+
+          <label for="calRange">Facteur</label>
+          <input id="calRange" type="range" min="0.60" max="1.60" step="0.001" value="1.130" />
+          <input id="calNum" type="number" min="0.600" max="1.600" step="0.001" value="1.130" style="width:7.5ch" />
         </div>
-        <div class="cal-row" style="position:relative">
-          <div id="bar5cm" class="bar-5cm" style="width: 200px;"></div>
+
+        <div class="cal-controls">
+          <span>Étalon</span>
+          <label><input type="radio" name="barLen" value="5" checked /> 5 cm</label>
+          <label><input type="radio" name="barLen" value="10" /> 10 cm</label>
+        </div>
+
+        <div class="bar-row">
+          <div id="bar" class="bar" style="width:200px"></div>
           <div class="bar-ends" aria-hidden="true"></div>
         </div>
-        <div class="cal-note">Ajustez jusqu’à ce que la barre fasse exactement <strong>5,00 cm</strong> au mètre.</div>
-      </details>
+        <div style="text-align:center;opacity:.85;font-size:.9rem">Ajuste le facteur pour que la barre fasse exactement la longueur choisie au mètre.</div>
+      </div>
     </section>
 
+    <!-- Footer (infos demandées en bas de l’écran) -->
     <footer id="footer">—</footer>
   </main>
 
@@ -207,459 +160,367 @@
   <script src="https://unpkg.com/bwip-js/dist/bwip-js-min.js"></script>
 
   <script>
-    // ===== Références UI =====
-    const cb2dCanvas  = document.getElementById('cb2d');
-    const cb2dWrap    = document.getElementById('cb2dWrap');
-    const rulerCanvas = document.getElementById('ruler');
-
-    const sizeRange = document.getElementById('sizeRange');
-    const sizeValue = document.getElementById('sizeValue');
-
-    const milsRange = document.getElementById('milsRange');
-    const milsValue = document.getElementById('milsValue');
-
-    const bytesRange = document.getElementById('bytesRange');
-    const bytesValue = document.getElementById('bytesValue');
-
-    const footerEl = document.getElementById('footer');
-
-    // Calibrage UI
-    const calRange = document.getElementById('calRange');
-    const calValue = document.getElementById('calValue');
-    const calReset = document.getElementById('calReset');
-    const bar5cmEl = document.getElementById('bar5cm');
-
-    // ===== Constantes =====
+    /* =========================
+       Utilitaires calibrage
+    ==========================*/
     const CM_PER_INCH = 2.54;
 
-    // ===== Détection Moto G7 pour calibrage par défaut =====
-    function isMotoG7UA() {
-      return true;
-      //const ua = (navigator.userAgent || '').toLowerCase();
-      //return ua.includes('moto g7') || ua.includes('moto g (7') || ua.includes('moto g(7');
-    }
-
-    // ===== Mesures CSS =====
-    function measureBasePxPerCm() {
-      const probe = document.createElement('div');
-      probe.style.position = 'absolute';
-      probe.style.left = '-9999px';
-      probe.style.top = '-9999px';
-      probe.style.width = '1cm';
-      probe.style.height = '1cm';
-      document.body.appendChild(probe);
-      const rect = probe.getBoundingClientRect();
-      document.body.removeChild(probe);
-      return rect.width;
+    function measureBasePxPerCm(){
+      const el = document.createElement('div');
+      el.style.position='absolute'; el.style.left='-9999px'; el.style.top='-9999px';
+      el.style.width='1cm'; el.style.height='1cm';
+      document.body.appendChild(el);
+      const px = el.getBoundingClientRect().width;
+      el.remove();
+      return px;
     }
     let basePxPerCm = measureBasePxPerCm();
 
-    function getStoredCal() {
-      const v = localStorage.getItem('cb2d_cal_factor');
-      if (v) return parseFloat(v);
-      // Valeur par défaut : Moto G7 ≈ 1.13×, sinon 1.000×
-      return isMotoG7UA() ? 1.13 : 1.000;
-    }
-    function setStoredCal(f) {
-      localStorage.setItem('cb2d_cal_factor', String(f));
-      calRange.value = String(f.toFixed(3));
-      calValue.textContent = f.toFixed(3);
-    }
-    function pxPerCm() { return basePxPerCm * getStoredCal(); }
-    function updateCalBar() { bar5cmEl.style.width = (5 * pxPerCm()) + 'px'; }
+    // Stockage
+    const LS_PROFILE = 'cb2d_profile';
+    const LS_CAL_MOTO = 'cb2d_cal_moto';
+    const LS_CAL_CUSTOM = 'cb2d_cal_custom';
+    const LS_BARLEN = 'cb2d_cal_barlen';
 
-    // ===== Payload (octets ASCII visibles) =====
-    function buildPayload(n) {
-      let s = '';
-      for (let i = 0; i < n; i++) s += String.fromCharCode(33 + (i % 94));
-      return s;
+    // Profil & facteur
+    function getProfile(){ return localStorage.getItem(LS_PROFILE) || 'motoG7'; }
+    function setProfile(p){ localStorage.setItem(LS_PROFILE, p); }
+
+    function getCalFactor(profile){
+      if(profile==='motoG7'){
+        const v = parseFloat(localStorage.getItem(LS_CAL_MOTO));
+        return Number.isFinite(v) ? v : 1.13;  // défaut Moto G7 forcé
+      }else{
+        const v = parseFloat(localStorage.getItem(LS_CAL_CUSTOM));
+        return Number.isFinite(v) ? v : 1.00;
+      }
+    }
+    function setCalFactor(profile, f){
+      localStorage.setItem(profile==='motoG7' ? LS_CAL_MOTO : LS_CAL_CUSTOM, String(f));
     }
 
-    /* ========= Compteur de modules robuste (définition C) =========
-       - Rendu haute échelle (SCALE=8)
-       - Détection de la bounding-box
-       - Profils 1D sur 9 lignes + 9 colonnes autour du centre
-       - Filtrage des runs trop courts
-       - Taille de module = médiane des runs (H et V)
-       - N = arrondi(largeur_bb / taille_module_px), moyenné H/V
-    */
+    function pxPerCm(profile){ return basePxPerCm * getCalFactor(profile); }
+
+    // Barre étalon
+    function getBarLenCm(){
+      const v = localStorage.getItem(LS_BARLEN);
+      return v ? parseInt(v,10) : 5;
+    }
+    function setBarLenCm(n){ localStorage.setItem(LS_BARLEN, String(n)); }
+
+    /* =========================
+       ModuleCounter (déf. C)
+       - rendu haut facteur
+       - bounding-box
+       - 9 lignes + 9 colonnes
+       - médiane des runs nettoyés
+    ==========================*/
     const ModuleCounter = (() => {
-      // Canvas off-screen réutilisé (évite reallocs)
-      const SCALE = 8;               // px par module pour la mesure
-      const W = 1400, H = 1400;      // zone max pour les symboles mesurés
-      const cvs = document.createElement('canvas');
-      cvs.width = W; cvs.height = H;
-      const ctx = cvs.getContext('2d', { willReadFrequently: true });
-    
-      // Petit cache (évite re-mesures identiques si on slide vite)
-      let lastKey = '';
-      let lastN = null;
-    
-      function luminanceSum(r,g,b) { return r + g + b; } // assez robuste ici
-    
-      function getBoundingBox(img) {
-        let minX = W, minY = H, maxX = -1, maxY = -1;
-        for (let y = 0; y < H; y++) {
-          const row = y * W * 4;
-          for (let x = 0; x < W; x++) {
-            const i = row + x * 4;
-            if (luminanceSum(img[i], img[i+1], img[i+2]) < 250 * 3) {
-              if (x < minX) minX = x;
-              if (y < minY) minY = y;
-              if (x > maxX) maxX = x;
-              if (y > maxY) maxY = y;
+      const SCALE = 8, W=1400, H=1400;
+      const cvs = document.createElement('canvas'); cvs.width=W; cvs.height=H;
+      const ctx = cvs.getContext('2d', { willReadFrequently:true });
+      let lastKey='', lastN=null;
+
+      const lum = (r,g,b)=>r+g+b;
+
+      function bbox(img){
+        let minX=W,minY=H,maxX=-1,maxY=-1;
+        for(let y=0;y<H;y++){
+          const row=y*W*4;
+          for(let x=0;x<W;x++){
+            const i=row+x*4;
+            if(lum(img[i],img[i+1],img[i+2])<250*3){
+              if(x<minX)minX=x; if(y<minY)minY=y;
+              if(x>maxX)maxX=x; if(y>maxY)maxY=y;
             }
           }
         }
-        if (maxX < 0 || maxY < 0) return null;
-        return { minX, minY, maxX, maxY };
+        if(maxX<0||maxY<0) return null;
+        return {minX,minY,maxX,maxY};
       }
-    
-      function runsOnRow(img, y, minX, maxX) {
-        const runs = [];
-        let prevBlack = null, len = 0;
-        const row = y * W * 4;
-        for (let x = minX; x <= maxX; x++) {
-          const i = row + x * 4;
-          const isBlack = (luminanceSum(img[i], img[i+1], img[i+2]) < 250 * 3);
-          if (prevBlack === null) { prevBlack = isBlack; len = 1; }
-          else if (isBlack === prevBlack) { len++; }
-          else { runs.push(len); prevBlack = isBlack; len = 1; }
+      function runsRow(img,y,minX,maxX){
+        const out=[]; let prev=null,len=0; const row=y*W*4;
+        for(let x=minX;x<=maxX;x++){
+          const i=row+x*4; const black=lum(img[i],img[i+1],img[i+2])<250*3;
+          if(prev===null){prev=black;len=1}
+          else if(black===prev){len++}
+          else {out.push(len); prev=black; len=1}
         }
-        if (len > 0) runs.push(len);
-        return runs;
+        if(len>0) out.push(len); return out;
       }
-    
-      function runsOnCol(img, x, minY, maxY) {
-        const runs = [];
-        let prevBlack = null, len = 0;
-        for (let y = minY; y <= maxY; y++) {
-          const i = (y * W + x) * 4;
-          const isBlack = (luminanceSum(img[i], img[i+1], img[i+2]) < 250 * 3);
-          if (prevBlack === null) { prevBlack = isBlack; len = 1; }
-          else if (isBlack === prevBlack) { len++; }
-          else { runs.push(len); prevBlack = isBlack; len = 1; }
+      function runsCol(img,x,minY,maxY){
+        const out=[]; let prev=null,len=0;
+        for(let y=minY;y<=maxY;y++){
+          const i=(y*W+x)*4; const black=lum(img[i],img[i+1],img[i+2])<250*3;
+          if(prev===null){prev=black;len=1}
+          else if(black===prev){len++}
+          else {out.push(len); prev=black; len=1}
         }
-        if (len > 0) runs.push(len);
-        return runs;
+        if(len>0) out.push(len); return out;
       }
-    
-      function median(arr) {
-        if (!arr.length) return 0;
-        const a = arr.slice().sort((x,y) => x - y);
-        const m = Math.floor(a.length / 2);
-        return (a.length % 2) ? a[m] : (a[m-1] + a[m]) / 2;
-      }
-    
-      function robustMinRun(runs) {
-        // filtre les runs trop courts (< SCALE/3) pour éliminer bruit/aliasing
-        const MIN_RUN = Math.max(2, Math.floor(SCALE / 3));
-        const clean = runs.filter(r => r >= MIN_RUN);
-        if (clean.length >= 3) return median(clean);     // médiane plus stable
-        if (runs.length) return Math.min(...runs);       // fallback
+      const median = a => {
+        if(!a.length) return 0;
+        const b=a.slice().sort((x,y)=>x-y); const m=Math.floor(b.length/2);
+        return (b.length%2)?b[m]:(b[m-1]+b[m])/2;
+      };
+      function robustMin(runs, SCALE){
+        const MIN = Math.max(2, Math.floor(SCALE/3));
+        const clean = runs.filter(r=>r>=MIN);
+        if(clean.length>=3) return median(clean);
+        if(runs.length) return Math.min(...runs);
         return 0;
       }
-    
+
       return {
-        measure(bcid, text) {
-          const key = bcid + '|' + text;
-          if (key === lastKey && lastN) return lastN;
-    
-          // 1) Rendu Aztec à échelle de mesure
-          ctx.fillStyle = '#fff';
-          ctx.fillRect(0, 0, W, H);
-          try {
-            bwipjs.toCanvas(cvs, {
-              bcid,
-              text,
-              scale: SCALE,
-              padding: 0,
-              backgroundcolor: 'FFFFFF',
-              includetext: false
-            });
-          } catch (e) {
-            console.error('Mesure modules : rendu échoué', e);
-            lastKey = key; lastN = null;
-            return null;
+        measure(bcid,text){
+          const key=bcid+'|'+text;
+          if(key===lastKey && lastN) return lastN;
+
+          // rendu
+          ctx.fillStyle='#fff'; ctx.fillRect(0,0,W,H);
+          try{
+            bwipjs.toCanvas(cvs,{ bcid, text, scale:SCALE, padding:0, backgroundcolor:'FFFFFF', includetext:false });
+          }catch(e){ console.error('Mesure modules : rendu échoué', e); lastKey=key; lastN=null; return null; }
+
+          const data = ctx.getImageData(0,0,W,H).data;
+          const bb = bbox(data); if(!bb){ lastKey=key; lastN=null; return null; }
+
+          const bbW=bb.maxX-bb.minX+1, bbH=bb.maxY-bb.minY+1;
+          const midY=Math.floor((bb.minY+bb.maxY)/2), midX=Math.floor((bb.minX+bb.maxX)/2);
+
+          const SAMPLES=9, stepY=Math.max(1,Math.floor(bbH/(SAMPLES+1))), stepX=Math.max(1,Math.floor(bbW/(SAMPLES+1)));
+          const runsH=[], runsV[];
+          for(let k=-Math.floor(SAMPLES/2); k<=Math.floor(SAMPLES/2); k++){
+            const y=Math.min(bb.maxY, Math.max(bb.minY, midY + k*stepY));
+            const x=Math.min(bb.maxX, Math.max(bb.minX, midX + k*stepX));
+            runsH.push(robustMin(runsRow(data,y,bb.minX,bb.maxX), SCALE));
+            runsV.push(robustMin(runsCol(data,x,bb.minY,bb.maxY), SCALE));
           }
-    
-          const data = ctx.getImageData(0, 0, W, H).data;
-          const bb = getBoundingBox(data);
-          if (!bb) { lastKey = key; lastN = null; return null; }
-    
-          const bbW = bb.maxX - bb.minX + 1;
-          const bbH = bb.maxY - bb.minY + 1;
-          const midY = Math.floor((bb.minY + bb.maxY) / 2);
-          const midX = Math.floor((bb.minX + bb.maxX) / 2);
-    
-          // 2) Échantillonnage multi‑lignes/colonnes autour du centre
-          const SAMPLES = 9; // impaire → inclut centre
-          const stepY = Math.max(1, Math.floor(bbH / (SAMPLES + 1)));
-          const stepX = Math.max(1, Math.floor(bbW / (SAMPLES + 1)));
-    
-          const minRunsH = [];
-          const minRunsV = [];
-    
-          for (let k = -Math.floor(SAMPLES/2); k <= Math.floor(SAMPLES/2); k++) {
-            const y = Math.min(bb.maxY, Math.max(bb.minY, midY + k * stepY));
-            const x = Math.min(bb.maxX, Math.max(bb.minX, midX + k * stepX));
-    
-            const rH = runsOnRow(data, y, bb.minX, bb.maxX);
-            const rV = runsOnCol(data, x, bb.minY, bb.maxY);
-    
-            const mh = robustMinRun(rH);
-            const mv = robustMinRun(rV);
-            if (mh > 0) minRunsH.push(mh);
-            if (mv > 0) minRunsV.push(mv);
-          }
-    
-          const modPxH = Math.max(1, Math.round(median(minRunsH)));
-          const modPxV = Math.max(1, Math.round(median(minRunsV)));
-    
-          const nH = Math.round(bbW / modPxH);
-          const nV = Math.round(bbH / modPxV);
-          const N = Math.max(1, Math.round((nH + nV) / 2));
-    
-          lastKey = key;
-          lastN = N;
-          return N;
+          const modPxH=Math.max(1, Math.round(median(runsH.filter(Boolean))));
+          const modPxV=Math.max(1, Math.round(median(runsV.filter(Boolean))));
+          const nH=Math.round(bbW/modPxH), nV=Math.round(bbH/modPxV);
+          const N=Math.max(1, Math.round((nH+nV)/2));
+
+          lastKey=key; lastN=N; return N;
         }
       };
     })();
-    
-    // Remplace la fonction existante par un simple wrapper :
-    function measureModulesVisible(bcid, text) {
-      return ModuleCounter.measure(bcid, text);
-    }
 
-    // ===== Règle calibrée =====
-    function renderRuler() {
-      const dpr = Math.max(1, window.devicePixelRatio || 1);
-      const rect = rulerCanvas.getBoundingClientRect();
-      rulerCanvas.width  = Math.floor(rect.width * dpr);
-      rulerCanvas.height = Math.floor(rect.height * dpr);
+    /* =========================
+       Règle calibrée
+    ==========================*/
+    const rulerCanvas = document.getElementById('ruler');
+    function renderRuler(profile){
+      const dpr=Math.max(1,window.devicePixelRatio||1);
+      const rect=rulerCanvas.getBoundingClientRect();
+      rulerCanvas.width=Math.floor(rect.width*dpr);
+      rulerCanvas.height=Math.floor(rect.height*dpr);
+      const ctx=rulerCanvas.getContext('2d');
+      ctx.setTransform(dpr,0,0,dpr,0,0);
 
-      const ctx = rulerCanvas.getContext('2d');
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      const W=rect.width, H=rect.height;
+      const ppcm=pxPerCm(profile), ppmm=ppcm/10;
 
-      const W = rect.width, H = rect.height;
-      const ppcm = pxPerCm();
-      const ppmm = ppcm / 10;
+      ctx.fillStyle='#fff'; ctx.fillRect(0,0,W,H);
 
-      // Fond
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, W, H);
-
-      // Quadrillage mm
-      for (let x = 0; x <= W + 0.5; x += ppmm) {
-        const mm = Math.round(x / ppmm);
-        ctx.beginPath();
-        ctx.moveTo(Math.round(x)+0.5, 0);
-        ctx.lineTo(Math.round(x)+0.5, H);
-        ctx.strokeStyle = (mm % 10 === 0) ? '#cfd6df' : '#eceff4';
-        ctx.lineWidth = (mm % 10 === 0) ? 1.0 : 0.5;
-        ctx.stroke();
+      for(let x=0;x<=W+0.5;x+=ppmm){
+        const mm=Math.round(x/ppmm);
+        ctx.beginPath(); ctx.moveTo(Math.round(x)+0.5,0); ctx.lineTo(Math.round(x)+0.5,H);
+        ctx.strokeStyle=(mm%10===0)?'#cfd6df':'#eceff4'; ctx.lineWidth=(mm%10===0)?1.0:0.5; ctx.stroke();
       }
-      for (let y = 0; y <= H + 0.5; y += ppmm) {
-        const mm = Math.round(y / ppmm);
-        ctx.beginPath();
-        ctx.moveTo(0, Math.round(y)+0.5);
-        ctx.lineTo(W, Math.round(y)+0.5);
-        ctx.strokeStyle = (mm % 10 === 0) ? '#cfd6df' : '#eceff4';
-        ctx.lineWidth = (mm % 10 === 0) ? 1.0 : 0.5;
-        ctx.stroke();
+      for(let y=0;y<=H+0.5;y+=ppmm){
+        const mm=Math.round(y/ppmm);
+        ctx.beginPath(); ctx.moveTo(0,Math.round(y)+0.5); ctx.lineTo(W,Math.round(y)+0.5);
+        ctx.strokeStyle=(mm%10===0)?'#cfd6df':'#eceff4'; ctx.lineWidth=(mm%10===0)?1.0:0.5; ctx.stroke();
       }
 
-      // Axes centraux
-      ctx.strokeStyle = '#9aa7b4';
-      ctx.lineWidth = 1.2;
+      ctx.strokeStyle='#9aa7b4'; ctx.lineWidth=1.2;
       ctx.beginPath();
-      ctx.moveTo(Math.round(W/2)+0.5, 0); ctx.lineTo(Math.round(W/2)+0.5, H);
-      ctx.moveTo(0, Math.round(H/2)+0.5); ctx.lineTo(W, Math.round(H/2)+0.5);
+      ctx.moveTo(Math.round(W/2)+0.5,0); ctx.lineTo(Math.round(W/2)+0.5,H);
+      ctx.moveTo(0,Math.round(H/2)+0.5); ctx.lineTo(W,Math.round(H/2)+0.5);
       ctx.stroke();
 
-      // Règle cm + ticks mm (haut & gauche)
-      ctx.strokeStyle = '#202730';
-      ctx.fillStyle = '#202730';
-      ctx.lineWidth = 1;
+      ctx.strokeStyle='#202730'; ctx.fillStyle='#202730'; ctx.lineWidth=1;
+      ctx.font='10px system-ui, sans-serif';
 
-      // Haut (X)
-      for (let cm = 0, x = 0; x <= W + 0.001; cm++, x = cm * ppcm) {
-        ctx.beginPath(); ctx.moveTo(Math.round(x)+0.5, 0); ctx.lineTo(Math.round(x)+0.5, 10); ctx.stroke();
-        ctx.font = '10px system-ui, sans-serif';
-        ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-        ctx.fillText(cm + ' cm', Math.round(x), 12);
-        for (let m = 1; m < 10; m++) {
-          const xm = x + m * ppmm; if (xm > W) break;
-          ctx.beginPath();
-          ctx.moveTo(Math.round(xm)+0.5, 0);
-          ctx.lineTo(Math.round(xm)+0.5, m % 5 === 0 ? 8 : 5);
-          ctx.stroke();
+      for(let cm=0,x=0;x<=W+0.001;cm++,x=cm*ppcm){
+        ctx.beginPath(); ctx.moveTo(Math.round(x)+0.5,0); ctx.lineTo(Math.round(x)+0.5,10); ctx.stroke();
+        ctx.textAlign='center'; ctx.textBaseline='top'; ctx.fillText(cm+' cm', Math.round(x), 12);
+        for(let m=1;m<10;m++){
+          const xm=x+m*ppmm; if(xm>W) break;
+          ctx.beginPath(); ctx.moveTo(Math.round(xm)+0.5,0); ctx.lineTo(Math.round(xm)+0.5, (m%5===0?8:5)); ctx.stroke();
         }
       }
-
-      // Gauche (Y)
-      for (let cm = 0, y = 0; y <= H + 0.001; cm++, y = cm * ppcm) {
-        ctx.beginPath(); ctx.moveTo(0, Math.round(y)+0.5); ctx.lineTo(10, Math.round(y)+0.5); ctx.stroke();
-        ctx.font = '10px system-ui, sans-serif';
-        ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-        ctx.fillText(cm + ' cm', 12, Math.round(y));
-        for (let m = 1; m < 10; m++) {
-          const ym = y + m * ppmm; if (ym > H) break;
-          ctx.beginPath();
-          ctx.moveTo(0, Math.round(ym)+0.5);
-          ctx.lineTo(m % 5 === 0 ? 8 : 5, Math.round(ym)+0.5);
-          ctx.stroke();
+      for(let cm=0,y=0;y<=H+0.001;cm++,y=cm*ppcm){
+        ctx.beginPath(); ctx.moveTo(0,Math.round(y)+0.5); ctx.lineTo(10,Math.round(y)+0.5); ctx.stroke();
+        ctx.textAlign='left'; ctx.textBaseline='middle'; ctx.fillText(cm+' cm',12,Math.round(y));
+        for(let m=1;m<10;m++){
+          const ym=y+m*ppmm; if(ym>H) break;
+          ctx.beginPath(); ctx.moveTo(0,Math.round(ym)+0.5); ctx.lineTo((m%5===0?8:5),Math.round(ym)+0.5); ctx.stroke();
         }
       }
     }
 
-    // ===== Rendu principal (taille FIXE, modules exacts, bi-liaison mils) =====
-    let linkGuard = false; // évite boucles cm <-> mils
+    /* =========================
+       Rendu CB2D taille FIXE
+    ==========================*/
+    const cb2dCanvas=document.getElementById('cb2d');
+    const cb2dWrap=document.getElementById('cb2dWrap');
 
-    function renderAll(origin) {
-      const dpr = Math.max(1, window.devicePixelRatio || 1);
-      const bcid = 'azteccode'; // mettre 'azteccodecompact' si besoin
-      const bytes = Number(bytesRange.value);
-      bytesValue.textContent = bytes;
-      const text = buildPayload(bytes);
+    function buildPayload(n){
+      let s=''; for(let i=0;i<n;i++) s+=String.fromCharCode(33+(i%94)); return s;
+    }
 
-      // 1) Mesure exacte des modules (déf. C)
-      const modules = measureModulesVisible(bcid, text);
-      if (!modules) {
-        footerEl.textContent = 'Erreur : impossible de compter les modules';
-        return;
-      }
+    function renderAll(){
+      const profile = profileSel.value;
+      // 1) valeurs UI
+      const sizeCm = Number(sizeRange.value); sizeValue.textContent=sizeCm.toFixed(1);
+      const bytes = Number(bytesRange.value); bytesValue.textContent=bytes;
 
-      // 2) Taille CB2D FIXE (cm -> px calibrés)
-      const sizeCm = Number(sizeRange.value);
-      sizeValue.textContent = sizeCm.toFixed(1);
+      // 2) modules (déf. C)
+      const bcid='azteccode'; // changer en 'azteccodecompact' si besoin
+      const text=buildPayload(bytes);
+      const N = ModuleCounter.measure(bcid, text) || 1;
 
-      const targetCssPx = sizeCm * pxPerCm(); // px CSS calibrés
-      const targetDevPx = targetCssPx * dpr;  // px device
+      // 3) taille CSS calibrée FIXE
+      const dpr=Math.max(1,window.devicePixelRatio||1);
+      const targetCssPx = sizeCm * pxPerCm(profile);
+      const targetDevPx = targetCssPx * dpr;
 
-      cb2dWrap.style.width  = targetCssPx + 'px';
-      cb2dWrap.style.height = targetCssPx + 'px';
-      cb2dCanvas.style.width  = targetCssPx + 'px';
-      cb2dCanvas.style.height = targetCssPx + 'px';
+      cb2dWrap.style.width = targetCssPx+'px';
+      cb2dWrap.style.height= targetCssPx+'px';
+      cb2dCanvas.style.width = targetCssPx+'px';
+      cb2dCanvas.style.height= targetCssPx+'px';
 
-      // 3) Densité effective (px/device par module)
-      const pxPerModuleEff = targetDevPx / modules;
-      const tooSmall = pxPerModuleEff < 1;
+      // 4) densité et alerte
+      const pxPerModule = targetDevPx / N;
+      const tooSmall = pxPerModule < 1;
       cb2dWrap.style.background = tooSmall ? 'var(--error-bg)' : 'transparent';
 
-      // 4) Mils/module effectif (à taille FIXE)
-      const cmPerModule = sizeCm / modules;
-      const inchPerModule = cmPerModule / CM_PER_INCH;
-      let milsPerModule = inchPerModule * 1000;
+      // 5) mils/module
+      const cmPerModule = sizeCm / N;
+      const milsPerModule = (cmPerModule / CM_PER_INCH) * 1000;
 
-      // Mise à jour slider mils si l’origine n’est pas "mils" (et clamp min/max)
-      if (!linkGuard && origin !== 'mils') {
-        const min = parseFloat(milsRange.min), max = parseFloat(milsRange.max);
-        const clamped = Math.max(min, Math.min(max, milsPerModule));
-        linkGuard = true;
-        milsRange.value = clamped.toFixed(1);
-        milsValue.textContent = parseFloat(milsRange.value).toFixed(1);
-        linkGuard = false;
-      }
-
-      // 5) Rendu CB2D : on rend à une échelle entière proche (oversampling doux),
-      //    puis on laisse le CSS ramener à la taille FIXE (nearest-neighbor).
-      const baseScale = Math.max(1, Math.round(Math.min(pxPerModuleEff, 12)));
-      cb2dCanvas.width  = modules * baseScale;
-      cb2dCanvas.height = modules * baseScale;
+      // 6) rendu oversamplé puis ramené à taille FIXE (nearest-neighbor)
+      const baseScale = Math.max(1, Math.round(Math.min(pxPerModule, 12)));
+      cb2dCanvas.width = N * baseScale;
+      cb2dCanvas.height= N * baseScale;
 
       const ctx = cb2dCanvas.getContext('2d');
-      if (ctx && 'imageSmoothingEnabled' in ctx) ctx.imageSmoothingEnabled = false;
-      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cb2dCanvas.width, cb2dCanvas.height);
+      if(ctx && 'imageSmoothingEnabled' in ctx) ctx.imageSmoothingEnabled=false;
+      ctx.fillStyle='#fff'; ctx.fillRect(0,0,cb2dCanvas.width,cb2dCanvas.height);
 
-      try {
-        if (tooSmall) {
-          ctx.fillStyle = '#d33';
-          const f = Math.round(14 * dpr);
-          ctx.font = `${f}px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif`;
-          ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      try{
+        if(tooSmall){
+          ctx.fillStyle='#d33';
+          const f=Math.round(14*dpr);
+          ctx.font=`${f}px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif`;
+          ctx.textAlign='center'; ctx.textBaseline='middle';
           ctx.fillText('< 1 px/module', cb2dCanvas.width/2, cb2dCanvas.height/2);
-        } else {
-          bwipjs.toCanvas(cb2dCanvas, { bcid, text, scale: baseScale, padding: 0, backgroundcolor: 'FFFFFF', includetext: false });
+        }else{
+          bwipjs.toCanvas(cb2dCanvas, { bcid, text, scale:baseScale, padding:0, backgroundcolor:'FFFFFF', includetext:false });
         }
-      } catch (err) {
+      }catch(err){
         console.error('Rendu CB2D échoué :', err);
-        ctx.fillStyle = '#d00';
-        const f = Math.round(14 * dpr);
-        ctx.font = `${f}px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif`;
-        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillStyle='#d00';
+        const f=Math.round(14*dpr);
+        ctx.font=`${f}px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif`;
+        ctx.textAlign='center'; ctx.textBaseline='middle';
         ctx.fillText('Erreur CB2D', cb2dCanvas.width/2, cb2dCanvas.height/2);
       }
 
-      // 6) Règle calibrée
-      renderRuler();
-
-      // 7) Footer lisible : N×N et mils/mod
-      footerEl.textContent = `N : ${modules} × ${modules}  —  mils/mod : ${milsPerModule.toFixed(1)}`;
+      // 7) Règle & Footer & derive info
+      renderRuler(profile);
+      footer.textContent = `N : ${N} × ${N} — mils/mod : ${milsPerModule.toFixed(1)} — Taille : ${sizeCm.toFixed(1)} cm`;
+      derivedInfo.textContent = `N=${N} • ${milsPerModule.toFixed(1)} mils/mod`;
+      // Mettre à jour la barre étalon
+      updateBarWidth(profile);
     }
 
-    // ===== Handlers sliders & calibrage =====
-    sizeRange.addEventListener('input', () => renderAll('cm'));
+    /* =========================
+       UI & Calibrage
+    ==========================*/
+    // Éléments UI
+    const sizeRange = document.getElementById('sizeRange');
+    const sizeValue = document.getElementById('sizeValue');
+    const bytesRange= document.getElementById('bytesRange');
+    const bytesValue= document.getElementById('bytesValue');
+    const footer   = document.getElementById('footer');
+    const derivedInfo = document.getElementById('derivedInfo');
 
-    milsRange.addEventListener('input', () => {
-      if (linkGuard) return;
-      linkGuard = true;
+    const profileSel = document.getElementById('profileSel');
+    const calRange   = document.getElementById('calRange');
+    const calNum     = document.getElementById('calNum');
+    const barEl      = document.getElementById('bar');
+    const barRadios  = [...document.querySelectorAll('input[name="barLen"]')];
 
-      // L’utilisateur fixe mils/module -> recalculer la taille CB2D en cm (N constant)
-      const milsTarget = Number(milsRange.value);
-      milsValue.textContent = milsTarget.toFixed(1);
+    function syncCalUIFromState(){
+      const p = getProfile();
+      profileSel.value = p;
+      const f = getCalFactor(p);
+      calRange.value = f.toFixed(3);
+      calNum.value   = f.toFixed(3);
+      const L = getBarLenCm();
+      barRadios.forEach(r=> r.checked = (parseInt(r.value,10)===L));
+      updateBarWidth(p);
+    }
 
-      // Recompter N modules avec les octets courants (on garde la taille physique à ajuster)
-      const bcid = 'azteccode';
-      const text = buildPayload(Number(bytesRange.value));
-      const modules = measureModulesVisible(bcid, text) || 1;
+    function updateBarWidth(profile){
+      const cm = getBarLenCm();
+      barEl.style.width = (cm * pxPerCm(profile)) + 'px';
+    }
 
-      const inchPerModule = milsTarget / 1000;
-      const cmPerModule = inchPerModule * CM_PER_INCH;
-      const sizeCm = cmPerModule * modules;
+    // Listeners
+    sizeRange.addEventListener('input', renderAll);
+    bytesRange.addEventListener('input', renderAll);
 
-      const clamped = Math.min(5, Math.max(1, sizeCm));
-      sizeRange.value = clamped.toFixed(1);
-      sizeValue.textContent = clamped.toFixed(1);
-
-      linkGuard = false;
-      renderAll('mils');
+    profileSel.addEventListener('change', ()=>{
+      const p = profileSel.value;
+      setProfile(p);
+      // Mettre un défaut si la valeur est absente
+      if(p==='motoG7' && !localStorage.getItem(LS_CAL_MOTO)) setCalFactor('motoG7', 1.13);
+      if(p==='custom' && !localStorage.getItem(LS_CAL_CUSTOM)) setCalFactor('custom', 1.00);
+      syncCalUIFromState();
+      renderAll();
     });
 
-    bytesRange.addEventListener('input', () => {
-      bytesValue.textContent = bytesRange.value;
-      // → Le nombre de modules change ; la taille reste FIXE ; mils/mod se met à jour
-      renderAll('data');
+    calRange.addEventListener('input', ()=>{
+      const p=profileSel.value; const v=parseFloat(calRange.value);
+      calNum.value = v.toFixed(3);
+      setCalFactor(p, v);
+      renderAll();
     });
-
-    calRange.addEventListener('input', () => {
-      const v = parseFloat(calRange.value);
-      setStoredCal(v);
-      updateCalBar();
-      renderAll('cal');
+    calNum.addEventListener('input', ()=>{
+      const p=profileSel.value; let v=parseFloat(calNum.value);
+      if(!Number.isFinite(v)) return;
+      v=Math.max(0.600, Math.min(1.600, v));
+      calNum.value=v.toFixed(3); calRange.value=v.toFixed(3);
+      setCalFactor(p, v);
+      renderAll();
     });
-    calReset.addEventListener('click', () => {
-      const def = isMotoG7UA() ? 1.13 : 1.00;
-      setStoredCal(def);
-      updateCalBar();
-      renderAll('cal');
-    });
+    barRadios.forEach(r=> r.addEventListener('change', ()=>{
+      const L=parseInt(document.querySelector('input[name="barLen"]:checked').value,10);
+      setBarLenCm(L);
+      updateBarWidth(profileSel.value);
+    }));
 
-    // ===== Init + rotation =====
-    (function init() {
-      // Calibrage par défaut (Moto G7 ≈ 1.13× sinon 1.00×)
-      setStoredCal(getStoredCal());
-      updateCalBar();
+    // Init + resize
+    (function init(){
+      // Profil Moto G7 forcé par défaut (si rien en LS)
+      if(!localStorage.getItem(LS_PROFILE)) setProfile('motoG7');
+      if(!localStorage.getItem(LS_CAL_MOTO)) setCalFactor('motoG7', 1.13);
+      if(!localStorage.getItem(LS_CAL_CUSTOM)) setCalFactor('custom', 1.00);
+      if(!localStorage.getItem(LS_BARLEN)) setBarLenCm(5);
 
-      renderAll('init');
+      syncCalUIFromState();
+      renderAll();
 
-      window.addEventListener('resize', () => {
-        clearTimeout(window.__rRt);
-        window.__rRt = setTimeout(() => {
+      window.addEventListener('resize', ()=>{
+        clearTimeout(window.__rt);
+        window.__rt=setTimeout(()=>{
           basePxPerCm = measureBasePxPerCm();
-          renderAll('resize');
-        }, 120);
+          renderAll();
+        },120);
       });
     })();
   </script>
