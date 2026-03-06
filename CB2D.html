@@ -289,7 +289,7 @@
           const midY=Math.floor((bb.minY+bb.maxY)/2), midX=Math.floor((bb.minX+bb.maxX)/2);
 
           const SAMPLES=9, stepY=Math.max(1,Math.floor(bbH/(SAMPLES+1))), stepX=Math.max(1,Math.floor(bbW/(SAMPLES+1)));
-          const runsH=[], runsV[];
+          const runsH=[], runsV=[];
           for(let k=-Math.floor(SAMPLES/2); k<=Math.floor(SAMPLES/2); k++){
             const y=Math.min(bb.maxY, Math.max(bb.minY, midY + k*stepY));
             const x=Math.min(bb.maxX, Math.max(bb.minX, midX + k*stepX));
