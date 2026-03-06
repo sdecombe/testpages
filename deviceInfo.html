@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Infos écran & appareil</title>
+<style>
+    body { font-family: system-ui, sans-serif; background:#0b1020; color:#e5e7eb; padding:20px; }
+    h1 { font-size:1.5rem; margin-bottom:.5rem; }
+    .card { background:#111827; padding:15px; margin:12px 0; border-radius:10px;
+            border:1px solid rgba(255,255,255,.1); }
+    h2 { font-size:1.2rem; margin-bottom:.3rem; color:#93c5fd; }
+    code { background:#1f2937; padding:3px 6px; border-radius:6px; }
+</style>
+</head>
+<body>
+
+<h1>Infos écran & appareil</h1>
+
+<div class="card">
+    <h2>User-Agent</h2>
+    <div id="ua"></div>
+</div>
+
+<div class="card">
+    <h2>Écran (CSS pixels)</h2>
+    <div id="css"></div>
+</div>
+
+<div class="card">
+    <h2>Pixels matériels (estimés)</h2>
+    <div id="hw"></div>
+</div>
+
+<div class="card">
+    <h2>Densité & ratio</h2>
+    <div id="density"></div>
+</div>
+
+<div class="card">
+    <h2>Orientation</h2>
+    <div id="orient"></div>
+</div>
+
+<div class="card">
+    <h2>Couleur / rendu</h2>
+    <div id="color"></div>
+</div>
+
+<div class="card">
+    <h2>Appareil (si disponible)</h2>
+    <div id="device"></div>
+</div>
+
+<div class="card">
+    <h2>Performances du navigateur</h2>
+    <div id="perf"></div>
+</div>
+
+<script>
+function updateInfos() {
+    // User agent
+    document.getElementById("ua").textContent = navigator.userAgent;
+
+    // CSS pixels
+    document.getElementById("css").textContent =
+        `${window.innerWidth} × ${window.innerHeight} px`;
+
+    // Pixels matériels estimés
+    const dpr = window.devicePixelRatio || 1;
+    document.getElementById("hw").textContent =
+        `${Math.round(window.innerWidth * dpr)} × ${Math.round(window.innerHeight * dpr)} px (DPR = ${dpr})`;
+
+    // Densité et ratio
+    document.getElementById("density").innerHTML = `
+        DPR : <code>${dpr}</code><br>
+        Pixel depth : <code>${screen.pixelDepth}</code> bits<br>
+        Color depth : <code>${screen.colorDepth}</code> bits
+    `;
+
+    // Orientation
+    let o = screen.orientation ? screen.orientation.type : "non supporté";
+    document.getElementById("orient").textContent = o;
+
+    // Color / rendu
+    const matchHDR = window.matchMedia("(dynamic-range: high)").matches;
+    const gamut  = window.matchMedia("(color-gamut: p3)").matches ? "P3" :
+                   window.matchMedia("(color-gamut: rec2020)").matches ? "Rec.2020" :
+                   "sRGB";
+    document.getElementById("color").innerHTML = `
+        Color gamut : <code>${gamut}</code><br>
+        HDR : <code>${matchHDR ? "oui" : "non"}</code>
+    `;
+
+    // Informations appareil (si exposées)
+    const dev = navigator;
+    let deviceInfo = "";
+
+    if (dev.hardwareConcurrency) deviceInfo += `CPU threads : <code>${dev.hardwareConcurrency}</code><br>`;
+    if (dev.deviceMemory)       deviceInfo += `Mémoire RAM approx : <code>${dev.deviceMemory} Go</code><br>`;
+    if (navigator.maxTouchPoints) deviceInfo += `Points tactiles : <code>${navigator.maxTouchPoints}</code><br>`;
+
+    document.getElementById("device").innerHTML = 
+        deviceInfo || "Aucune information directe disponible.";
+
+    // Performances navigateur
+    const perf = performance;
+    document.getElementById("perf").innerHTML = `
+        Temps depuis ouverture : <code>${(perf.now()/1000).toFixed(2)} s</code><br>
+        Navigation Timing API supporté : <code>${!!perf.timing}</code><br>
+        Mémoire JS : <code>${perf.memory ? perf.memory.usedJSHeapSize + " / " + perf.memory.jsHeapSizeLimit : "non disponible"}</code>
+    `;
+}
+
+// Mise à jour continue en cas de rotation / resize
+updateInfos();
+window.addEventListener("resize", updateInfos);
+window.addEventListener("orientationchange", updateInfos);
+</script>
+
+</body>
+</html>
