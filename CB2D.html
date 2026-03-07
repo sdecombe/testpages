@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>CB2D (Aztec) — taille fixe, mesure exacte N (delta), calibrage</title>
+  <title>CB2D (Aztec) — taille fixe, mesure exacte N (bwipjs.raw), calibrage</title>
   <style>
     :root{
       color-scheme: light dark;
@@ -28,6 +28,7 @@
     }
     .zone{ position:relative; z-index:1; }
     .zone-top{ display:flex; align-items:center; justify-content:center; } /* centre HV */
+
     .cb2d-wrap{
       display:inline-flex; align-items:center; justify-content:center;
       border-radius:10px; background:transparent;
@@ -157,10 +158,20 @@
             <option value="7">7</option>
             <option value="8">8</option>
           </select>
-          <span class="pill" id="aztecInfo">Mode: full • Layers: auto</span>
+
+          <label for="ecSel">ECC</label>
+          <select id="ecSel">
+            <option value="23" selected>23%</option>
+            <option value="10">10%</option>
+            <option value="30">30%</option>
+            <option value="40">40%</option>
+          </select>
+
+          <span class="pill" id="aztecInfo">Mode: full • Layers: auto • ECC: 23%</span>
         </div>
         <div style="opacity:.8; font-size:.9rem; text-align:center">
-          Astuce : en <em>Full</em>, <code>layers=1</code> ⇒ <strong>N=19</strong>. En <em>Compact</em>, <code>layers=1</code> ⇒ <strong>N=17</strong>.
+          Astuce : en <em>Full</em>, <code>layers=1</code> ⇒ <strong>N=19</strong> (si charge + ECC tiennent).  
+          En <em>Compact</em>, <code>layers=1</code> ⇒ <strong>N=17</strong>.
         </div>
       </div>
 
@@ -223,6 +234,7 @@
     const LS_BARLEN = 'cb2d_cal_barlen';
     const LS_MODE = 'cb2d_mode';
     const LS_LAYERS = 'cb2d_layers';
+    const LS_EC = 'cb2d_ec';
 
     function getProfile(){ return localStorage.getItem(LS_PROFILE) || 'motoG7'; }
     function setProfile(p){ localStorage.setItem(LS_PROFILE, p); }
@@ -240,38 +252,117 @@
       localStorage.setItem(profile==='motoG7' ? LS_CAL_MOTO : LS_CAL_CUSTOM, String(f));
     }
 
-    function pxPerCm(profile){ return basePxPerCm * getCalFactor(profile); }
+    function pxPerCm(profile){ return measureBasePxPerCm() * getCalFactor(profile); }
 
-    function getBarLenCm(){
-      const v = localStorage.getItem(LS_BARLEN);
-      return v ? parseInt(v,10) : 5;
-    }
+    function getBarLenCm(){ return parseInt(localStorage.getItem(LS_BARLEN) || '5', 10); }
     function setBarLenCm(n){ localStorage.setItem(LS_BARLEN, String(n)); }
 
     function getMode(){ return localStorage.getItem(LS_MODE) || 'full'; }
     function setMode(m){ localStorage.setItem(LS_MODE, m); }
 
-    function getLayers(){
-      return localStorage.getItem(LS_LAYERS) || 'auto';
+    function getLayers(){ return localStorage.getItem(LS_LAYERS) || 'auto'; }
+    function setLayers(v){ localStorage.setItem(LS_LAYERS, v); }
+
+    function getEc(){ return localStorage.getItem(LS_EC) || '23'; }
+    function setEc(v){ localStorage.setItem(LS_EC, v); }
+
+    /* =========================
+       Mesure N *exacte* via bwipjs.raw()
+       + rendu à taille physique fixe (cm)
+    ==========================*/
+
+    /**
+     * Encode et retourne la matrice logique (pixs, pixx, pixy) + N exact.
+     * @param {'azteccode'|'azteccodecompact'} bcid
+     * @param {string} text
+     * @param {{layers?:number, eclevel?:number}} encOpts
+     * @returns {{N:number, pixs:Uint8Array|Array, pixx:number, pixy:number}}
+     */
+    function encodeRaw(bcid, text, encOpts) {
+      // bwipjs.raw → tableau de résultats (1ère entrée = image)
+      const out = bwipjs.raw({ bcid, text, ...encOpts })[0];
+      if (!out || !out.pixs || !out.pixx || !out.pixy) return null;
+      if (out.pixx !== out.pixy) return null; // Aztec = carré
+      return { N: out.pixx, pixs: out.pixs, pixx: out.pixx, pixy: out.pixy };
     }
-    function setLayers(v){
-      localStorage.setItem(LS_LAYERS, v);
-    }
 
+    /**
+     * Rendu à partir de la matrice brute :
+     * - construit un offscreen N×N (ImageData binaire)
+     * - dessine dans le canvas d'affichage avec un *scale entier*
+     * - fixe la taille CSS calibrée (cm)
+     * @returns {{N:number, milsPerModule:number, pxPerModule:number, tooSmall:boolean}}
+     */
+    function renderAztecFromRaw(canvas, bcid, text, encOpts, sizeCm, profile) {
+      // 1) Encodage brut (N exact + matrice)
+      const raw = encodeRaw(bcid, text, encOpts);
+      if (!raw) throw new Error('Encodage/mensuration Aztec impossible');
+      const { N, pixs, pixx, pixy } = raw;
 
-    function measureModules(bcid, text, eclevel) {
-		const result = bwipjs.raw({
-			bcid,
-			text,
-			eclevel
-		})[0];
+      // 2) Taille physique cible (CSS)
+      const dpr = Math.max(1, window.devicePixelRatio || 1);
+      const targetCssPx = sizeCm * pxPerCm(profile);
+      const targetDevPx = targetCssPx * dpr;
 
-		const N = result.pixx;
+      // 3) Densité device
+      const pxPerModule = targetDevPx / N;
+      const tooSmall = pxPerModule < 1;
 
-      // Bornes de bon sens
-      if (N < 9 || N > 191) return null;
+      // 4) Offscreen N×N → ImageData binaire
+      const off = document.createElement('canvas');
+      off.width = N; off.height = N;
+      const octx = off.getContext('2d', { willReadFrequently: false });
+      const img = octx.createImageData(N, N);
 
-      return N;
+      // Convention de bwipjs.raw : dans ton exemple, bit=1 → noir
+      // On suit la même convention : noir (0,0,0,255) si bit=1 ; sinon blanc.
+      let i = 0; // index dans pixs
+      for (let y = 0; y < N; y++) {
+        for (let x = 0; x < N; x++, i++) {
+          const v = pixs[i] ? 0 : 255;
+          const j = (y * N + x) * 4;
+          img.data[j]     = v;
+          img.data[j + 1] = v;
+          img.data[j + 2] = v;
+          img.data[j + 3] = 255;
+        }
+      }
+      octx.putImageData(img, 0, 0);
+
+      // 5) Prépare le canvas d'affichage
+      //    - buffer interne en multiple entier de N (pour bords nets)
+      //    - taille CSS calibrée = cm * pxPerCm(profile)
+      const scale = Math.max(1, Math.round(Math.min(pxPerModule, 12)));
+      const W = N * scale, H = N * scale;
+
+      canvas.width = W;
+      canvas.height = H;
+      canvas.style.width  = targetCssPx + 'px';
+      canvas.style.height = targetCssPx + 'px';
+
+      const ctx = canvas.getContext('2d', { willReadFrequently: false });
+      if ('imageSmoothingEnabled' in ctx) ctx.imageSmoothingEnabled = false;
+
+      // Fond blanc + alerte si trop petit
+      ctx.fillStyle = tooSmall ? '#fbe9e7' : '#ffffff';
+      ctx.fillRect(0, 0, W, H);
+
+      if (tooSmall) {
+        ctx.fillStyle = '#d00';
+        const f = Math.round(14 * dpr);
+        ctx.font = `${f}px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif`;
+        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText('< 1 px/module', W/2, H/2);
+      } else {
+        // 6) Dessine l'offscreen en *nearest neighbor*
+        ctx.drawImage(off, 0, 0, W, H);
+      }
+
+      // 7) mils/module (à taille physique *fixe*)
+      const cmPerModule = sizeCm / N;
+      const milsPerModule = (cmPerModule / CM_PER_INCH) * 1000;
+
+      return { N, milsPerModule, pxPerModule, tooSmall };
     }
 
     /* =========================
@@ -315,7 +406,7 @@
         ctx.textAlign='center'; ctx.textBaseline='top'; ctx.fillText(cm+' cm', Math.round(x), 12);
         for (let m=1;m<10;m++){
           const xm=x+m*ppmm; if(xm>W) break;
-          ctx.beginPath(); ctx.moveTo(Math.round(xm)+0.5,0); ctx.lineTo(Math.round(xm)+0.5,(m%5===0?8:5)); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(Math.round(xm)+0.5, 0); ctx.lineTo(Math.round(xm)+0.5,(m%5===0?8:5)); ctx.stroke();
         }
       }
       for(let cm=0,y=0;y<=H+0.001;cm++,y=cm*ppcm){
@@ -330,7 +421,7 @@
     }
 
     /* =========================
-       Rendu CB2D taille FIXE
+       Rendu principal
     ==========================*/
     const cb2dCanvas=document.getElementById('cb2d');
     const cb2dWrap=document.getElementById('cb2dWrap');
@@ -339,6 +430,7 @@
       let s=''; for(let i=0;i<n;i++) s+=String.fromCharCode(33+(i%94)); return s;
     }
 
+    // Éléments UI
     const sizeRange = document.getElementById('sizeRange');
     const sizeValue = document.getElementById('sizeValue');
     const bytesRange= document.getElementById('bytesRange');
@@ -354,112 +446,81 @@
 
     const modeSel    = document.getElementById('modeSel');
     const layersSel  = document.getElementById('layersSel');
+    const ecSel      = document.getElementById('ecSel');
     const aztecInfo  = document.getElementById('aztecInfo');
 
     function getAztecOpts() {
       const mode = modeSel.value;      // 'full' | 'compact'
       const layersV = layersSel.value; // 'auto' | '0'..'8'
+      const ecV = parseInt(ecSel.value, 10); // % ECC
       const bcid = (mode === 'compact') ? 'azteccodecompact' : 'azteccode';
-      const opts = {};
+      const opts = { eclevel: ecV };
       if (layersV !== 'auto') {
         opts.layers = parseInt(layersV, 10);
       }
-      return { bcid, opts, mode, layersV };
+      return { bcid, opts, mode, layersV, ecV };
     }
 
     function syncAztecInfo() {
-      const { mode, layersV } = getAztecOpts();
-      aztecInfo.textContent = `Mode: ${mode} • Layers: ${layersV}`;
+      const { mode, layersV, ecV } = getAztecOpts();
+      aztecInfo.textContent = `Mode: ${mode} • Layers: ${layersV} • ECC: ${ecV}%`;
     }
 
-    function renderAll(){
-      const profile = profileSel.value;
-	  const eccLevel = 23;
-
-      // 1) valeurs UI
-      const sizeCm = Number(sizeRange.value); sizeValue.textContent=sizeCm.toFixed(1);
-      const bytes = Number(bytesRange.value); bytesValue.textContent=bytes;
-
-      // 2) paramètres Aztec (mode/layers)
-      const { bcid, opts } = getAztecOpts();
-
-      // 3) modules (déf. C) — mesure exacte par delta (annule DPR + offset)
-      const text=buildPayload(bytes);
-      const N = measureModules(bcid, text, eccLevel) || 1;
-
-      // 4) taille CSS calibrée FIXE
-      const dpr=Math.max(1,window.devicePixelRatio||1);
-      const targetCssPx = sizeCm * pxPerCm(profile);
-      const targetDevPx = targetCssPx * dpr;
-
-      cb2dWrap.style.width = targetCssPx+'px';
-      cb2dWrap.style.height= targetCssPx+'px';
-      cb2dCanvas.style.width = targetCssPx+'px';
-      cb2dCanvas.style.height= targetCssPx+'px';
-
-      // 5) densité et alerte
-      const pxPerModule = targetDevPx / N;
-      const tooSmall = pxPerModule < 1;
-      cb2dWrap.style.background = tooSmall ? 'var(--error-bg)' : 'transparent';
-
-      // 6) mils/module
-      const cmPerModule = sizeCm / N;
-      const milsPerModule = (cmPerModule / CM_PER_INCH) * 1000;
-
-      // 7) rendu oversamplé puis ramené à taille FIXE (nearest-neighbor)
-      const baseScale = Math.max(1, Math.round(Math.min(pxPerModule, 12)));
-      cb2dCanvas.width = N * baseScale;
-      cb2dCanvas.height= N * baseScale;
-
-      const ctx = cb2dCanvas.getContext('2d');
-      if(ctx && 'imageSmoothingEnabled' in ctx) ctx.imageSmoothingEnabled=false;
-      ctx.fillStyle='#fff'; ctx.fillRect(0,0,cb2dCanvas.width,cb2dCanvas.height);
-
-      try{
-        if(tooSmall){
-          ctx.fillStyle='#d33';
-          const f=Math.round(14*dpr);
-          ctx.font=`${f}px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif`;
-          ctx.textAlign='center'; ctx.textBaseline='middle';
-          ctx.fillText('< 1 px/module', cb2dCanvas.width/2, cb2dCanvas.height/2);
-        }else{
-          bwipjs.toCanvas(cb2dCanvas, {
-            bcid, text,
-            scale: baseScale,
-            padding: 0,
-			eccLevel: eccLevel,
-            includetext: false,
-            backgroundcolor: 'FFFFFF',
-            ...opts
-          });
-        }
-      }catch(err){
-        console.error('Rendu CB2D échoué :', err);
-        ctx.fillStyle='#d00';
-        const f=Math.round(14*dpr);
-        ctx.font=`${f}px system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif`;
-        ctx.textAlign='center'; ctx.textBaseline='middle';
-        ctx.fillText('Erreur CB2D', cb2dCanvas.width/2, cb2dCanvas.height/2);
-      }
-
-      // 8) Règle & Footer & derive info
-      renderRuler(profile);
-      footer.textContent = `N : ${N} × ${N} — mils/mod : ${milsPerModule.toFixed(1)} — Taille : ${sizeCm.toFixed(1)} cm`;
-      derivedInfo.textContent = `N=${N} • ${milsPerModule.toFixed(1)} mils/mod`;
-
-      // Mettre à jour la barre étalon (calibrage)
-      updateBarWidth(profile);
-    }
-
-    /* =========================
-       UI & Calibrage
-    ==========================*/
     function updateBarWidth(profile){
       const cm = getBarLenCm();
       const px = cm * pxPerCm(profile);
       barEl.style.width = px + 'px';
     }
 
+    function renderAll(){
+      const profile = profileSel.value;
+
+      // 1) valeurs UI
+      const sizeCm = Number(sizeRange.value); sizeValue.textContent=sizeCm.toFixed(1);
+      const bytes = Number(bytesRange.value); bytesValue.textContent=bytes;
+
+      // 2) paramètres Aztec (mode/layers/ECC)
+      const { bcid, opts } = getAztecOpts();
+
+      // 3) encodage + rendu à partir de raw()
+      const text=buildPayload(bytes);
+
+      let info;
+      try {
+        info = renderAztecFromRaw(cb2dCanvas, bcid, text, opts, sizeCm, profile);
+      } catch (e) {
+        console.error(e);
+        // Affiche une erreur lisible
+        const dpr = Math.max(1, window.devicePixelRatio || 1);
+        cb2dCanvas.width = 320; cb2dCanvas.height = 160;
+        cb2dCanvas.style.width = (160/dpr)+'px'; cb2dCanvas.style.height = (80/dpr)+'px';
+        const ctx = cb2dCanvas.getContext('2d');
+        if ('imageSmoothingEnabled' in ctx) ctx.imageSmoothingEnabled=false;
+        ctx.fillStyle='#fff'; ctx.fillRect(0,0,cb2dCanvas.width,cb2dCanvas.height);
+        ctx.fillStyle='#d00';
+        ctx.font = Math.round(14*dpr)+'px system-ui, sans-serif';
+        ctx.textAlign='center'; ctx.textBaseline='middle';
+        ctx.fillText('Erreur encodage CB2D', cb2dCanvas.width/2, cb2dCanvas.height/2);
+        footer.textContent = 'Erreur encodage CB2D';
+        derivedInfo.textContent = '—';
+        renderRuler(profile);
+        updateBarWidth(profile);
+        return;
+      }
+
+      const { N, milsPerModule, pxPerModule, tooSmall } = info;
+      cb2dWrap.style.background = tooSmall ? 'var(--error-bg)' : 'transparent';
+
+      // 4) Règle & Footer & derive info
+      renderRuler(profile);
+      footer.textContent = `N : ${N} × ${N} — mils/mod : ${milsPerModule.toFixed(1)} — Taille : ${sizeCm.toFixed(1)} cm`;
+      derivedInfo.textContent = `N=${N} • ${milsPerModule.toFixed(1)} mils/mod`;
+      updateBarWidth(profile);
+    }
+
+    /* =========================
+       UI & évènements
+    ==========================*/
     function syncCalUIFromState(){
       const p = getProfile();
       profileSel.value = p;
@@ -471,7 +532,16 @@
       updateBarWidth(p);
     }
 
-    // Elements
+    function syncAztecUIFromState(){
+      const mode = getMode();
+      const layers = getLayers();
+      const ec = getEc();
+      modeSel.value = mode;
+      layersSel.value = layers;
+      ecSel.value = ec;
+      syncAztecInfo();
+    }
+
     sizeRange.addEventListener('input', renderAll);
     bytesRange.addEventListener('input', renderAll);
 
@@ -514,14 +584,11 @@
       syncAztecInfo();
       renderAll();
     });
-
-    function syncAztecUIFromState(){
-      const mode = getMode();
-      const layers = getLayers();
-      modeSel.value = mode;
-      layersSel.value = layers;
+    ecSel.addEventListener('change', ()=>{
+      setEc(ecSel.value);
       syncAztecInfo();
-    }
+      renderAll();
+    });
 
     // Init + resize
     (function init(){
@@ -532,6 +599,7 @@
       if(!localStorage.getItem(LS_BARLEN)) setBarLenCm(5);
       if(!localStorage.getItem(LS_MODE)) setMode('full');
       if(!localStorage.getItem(LS_LAYERS)) setLayers('auto');
+      if(!localStorage.getItem(LS_EC)) setEc('23');
 
       syncCalUIFromState();
       syncAztecUIFromState();
