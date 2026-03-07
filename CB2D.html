@@ -263,41 +263,14 @@
        - rend à scale=1 et scale=2
        - annule offset & corrige DPR
     ==========================*/
-    function measureModulesDelta(bcid, text, opts = {}) {
-      const dpr = Math.max(1, window.devicePixelRatio || 1);
+    function measureModulesDelta(bcid, text, eclevel) {
+		const result = bwipjs.raw({
+			bcid,
+			text,
+			eclevel
+		})[0];
 
-      function renderAt(scale) {
-        const c = document.createElement('canvas');
-        c.width = 0; c.height = 0; // reset
-        bwipjs.toCanvas(c, {
-          bcid,
-          text,
-          scale,
-          padding: 0,
-          includetext: false,
-          backgroundcolor: 'FFFFFF',
-          ...opts,
-        });
-        return { w: c.width, h: c.height };
-      }
-
-      const a = renderAt(1);
-      const b = renderAt(2);
-
-      if (a.w <= 0 || a.h <= 0 || b.w <= 0 || b.h <= 0) return null;
-
-      const nW = (b.w - a.w) / (dpr * (2 - 1));
-      const nH = (b.h - a.h) / (dpr * (2 - 1));
-      let nFloat = (nW + nH) / 2;
-
-      // Snap à l'impair le plus proche (Aztec -> 13,15,17,19,23,...)
-      let N = Math.round(nFloat);
-      if (N % 2 === 0) {
-        const down = N - 1, up = N + 1;
-        const errDown = Math.abs(nW - down) + Math.abs(nH - down);
-        const errUp   = Math.abs(nW - up)   + Math.abs(nH - up);
-        N = errDown <= errUp ? down : up;
-      }
+		const N = result.pixx;
 
       // Bornes de bon sens
       if (N < 9 || N > 191) return null;
@@ -405,6 +378,7 @@
 
     function renderAll(){
       const profile = profileSel.value;
+	  const eccLevel = 23;
 
       // 1) valeurs UI
       const sizeCm = Number(sizeRange.value); sizeValue.textContent=sizeCm.toFixed(1);
@@ -415,7 +389,7 @@
 
       // 3) modules (déf. C) — mesure exacte par delta (annule DPR + offset)
       const text=buildPayload(bytes);
-      const N = measureModulesDelta(bcid, text, opts) || 1;
+      const N = measureModulesDelta(bcid, text, eccLevel) || 1;
 
       // 4) taille CSS calibrée FIXE
       const dpr=Math.max(1,window.devicePixelRatio||1);
@@ -457,6 +431,7 @@
             bcid, text,
             scale: baseScale,
             padding: 0,
+			eccLevel: eccLevel,
             includetext: false,
             backgroundcolor: 'FFFFFF',
             ...opts
