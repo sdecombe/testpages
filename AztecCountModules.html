@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Aztec modules</title>
+<script src="https://unpkg.com/bwip-js/dist/bwip-js-min.js"></script>
+<style>
+body{
+    font-family:sans-serif;
+    text-align:center;
+    margin-top:40px;
+}
+canvas{
+    image-rendering:pixelated;
+}
+</style>
+</head>
+<body>
+
+<canvas id="aztec"></canvas>
+<div id="info"></div>
+
+<script>
+
+const result = bwipjs.raw({
+    bcid: 'azteccode',
+    text: '0123456789',
+    eclevel: 23
+})[0];
+
+const pixels = result.pixs;
+const width = result.pixx;
+const height = result.pixy;
+
+const canvas = document.getElementById("aztec");
+const ctx = canvas.getContext("2d");
+
+canvas.width = width;
+canvas.height = height;
+
+const img = ctx.createImageData(width, height);
+
+for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+
+        const bit = pixels[y * width + x];
+        const v = bit ? 0 : 255;
+
+        const i = (y * width + x) * 4;
+
+        img.data[i] = v;
+        img.data[i+1] = v;
+        img.data[i+2] = v;
+        img.data[i+3] = 255;
+    }
+}
+
+ctx.putImageData(img,0,0);
+
+document.getElementById("info").textContent =
+    width + " × " + height + " modules (" +
+    width*height + " modules)";
+
+</script>
+
+</body>
+</html>
