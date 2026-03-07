@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>CB2D (Aztec) — taille fixe, modules exacts, calibrage</title>
+  <title>CB2D (Aztec) — taille fixe, mesure exacte N (delta), calibrage</title>
   <style>
     :root{
       color-scheme: light dark;
@@ -55,7 +55,7 @@
       box-shadow:0 10px 32px rgba(0,0,0,.45);
       padding:12px 14px; display:grid; gap:12px; justify-items:center;
     }
-    .row{ width:100%; max-width:720px; display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:center }
+    .row{ width:100%; max-width:820px; display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:center }
     label{ font-size:.95rem; opacity:.95 }
     input[type="range"]{ width:min(72vw,480px); accent-color:var(--accent) }
     .readout, .pill{
@@ -65,15 +65,27 @@
     .readout{ min-width:6.2ch; text-align:right }
     .pill{ white-space:nowrap }
 
+    /* Paramètres Aztec (optionnels) */
+    .aztec-block{
+      width:100%; max-width:820px; background:var(--panel);
+      border:1px solid #1f2a34; border-radius:12px; padding:10px 12px;
+      display:grid; gap:10px;
+    }
+    select{
+      background:var(--panel-2); color:var(--fg); border:1px solid #1f2a34; border-radius:8px; padding:6px 8px;
+      min-width:10ch;
+    }
+
     /* Profil + Calibrage étendu (sans overlay) */
     .cal-block{
-      width:100%; max-width:760px; background:var(--panel);
+      width:100%; max-width:820px; background:var(--panel);
       border:1px solid #1f2a34; border-radius:12px; padding:10px 12px;
       display:grid; gap:10px;
     }
     .cal-controls{ display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:center }
-    select, input[type="number"]{
-      background:var(--panel-2); color:var(--fg); border:1px solid #1f2a34; border-radius:8px; padding:6px 8px
+    input[type="number"]{
+      background:var(--panel-2); color:var(--fg); border:1px solid #1f2a34; border-radius:8px; padding:6px 8px;
+      width:7.5ch
     }
     .bar-row{ display:flex; gap:12px; align-items:center; justify-content:center; flex-wrap:wrap }
     .bar{ position:relative; height:16px; border-radius:8px; background:linear-gradient(90deg,#4b9ef7,#1663c7);
@@ -123,7 +135,36 @@
         <span class="readout"><span id="bytesValue">64</span></span>
       </div>
 
-      <!-- 2) Profil + Calibrage -->
+      <!-- 2) Paramètres Aztec (optionnels) -->
+      <div class="aztec-block" aria-label="Paramètres Aztec (optionnels)">
+        <div class="row">
+          <label for="modeSel">Mode</label>
+          <select id="modeSel">
+            <option value="full" selected>Full (azteccode)</option>
+            <option value="compact">Compact (azteccodecompact)</option>
+          </select>
+
+          <label for="layersSel">Layers</label>
+          <select id="layersSel">
+            <option value="auto" selected>auto</option>
+            <option value="0">0</option>
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4">4</option>
+            <option value="5">5</option>
+            <option value="6">6</option>
+            <option value="7">7</option>
+            <option value="8">8</option>
+          </select>
+          <span class="pill" id="aztecInfo">Mode: full • Layers: auto</span>
+        </div>
+        <div style="opacity:.8; font-size:.9rem; text-align:center">
+          Astuce : en <em>Full</em>, <code>layers=1</code> ⇒ <strong>N=19</strong>. En <em>Compact</em>, <code>layers=1</code> ⇒ <strong>N=17</strong>.
+        </div>
+      </div>
+
+      <!-- 3) Profil + Calibrage -->
       <div class="cal-block" aria-label="Profil & calibrage">
         <div class="cal-controls">
           <label for="profileSel">Profil</label>
@@ -134,7 +175,7 @@
 
           <label for="calRange">Facteur</label>
           <input id="calRange" type="range" min="0.60" max="1.60" step="0.001" value="1.600" />
-          <input id="calNum" type="number" min="0.600" max="1.600" step="0.001" value="1.600" style="width:7.5ch" />
+          <input id="calNum" type="number" min="0.600" max="1.600" step="0.001" value="1.600" />
         </div>
 
         <div class="cal-controls">
@@ -158,53 +199,7 @@
   <!-- Générateur Aztec -->
   <script src="https://unpkg.com/bwip-js/dist/bwip-js-min.js"></script>
 
-<script>
-
-	/**
-	 * Mesure *exacte* du nombre de modules (déf. C) avec bwip-js, en tenant compte du HiDPI.
-	 * Principe : toCanvas(scale=1, padding=0) => canvas.width = N * devicePixelRatio.
-	 * On corrige en divisant par DPR, puis on "snap" au nombre impair le plus proche.
-	 */
-	function measureModulesExact(bcid, text) {
-	  const tmp = document.createElement('canvas');
-	  // (par prudence, réinitialiser)
-	  tmp.width = 0; tmp.height = 0;
-
-	  // 1) Rendu Aztec à 1 px/module, sans bord ajouté
-	  bwipjs.toCanvas(tmp, {
-		bcid,
-		text,
-		scale: 1,
-		padding: 0,
-		backgroundcolor: 'FFFFFF',
-		includetext: false
-	  });
-
-	  const W = tmp.width;
-	  const H = tmp.height;
-	  if (W <= 0 || W !== H) return null;
-
-	  // 2) Corrige l’effet HiDPI
-	  const dpr = Math.max(1, window.devicePixelRatio || 1);
-	  const nFloat = W / dpr;
-
-	  // 3) Aztec a toujours une dimension IMPAIRE → on s’aligne dessus
-	  //    (ex. 18.9 → 19 ; 20.2 → 21)
-	  let N = Math.round(nFloat);
-	  if (N % 2 === 0) {
-		// choisit l’impair le plus proche
-		const down = N - 1;
-		const up   = N + 1;
-		N = (Math.abs(nFloat - down) <= Math.abs(nFloat - up)) ? down : up;
-	  }
-
-	  // 4) Garde une borne raisonnable (Aztec full : 15..151 ; compact : 13..25)
-	  if (N < 9 || N > 191) return null;
-
-	  return N;
-	}
-
-
+  <script>
     /* =========================
        Calibrage & persistance
     ==========================*/
@@ -226,6 +221,8 @@
     const LS_CAL_MOTO = 'cb2d_cal_moto';
     const LS_CAL_CUSTOM = 'cb2d_cal_custom';
     const LS_BARLEN = 'cb2d_cal_barlen';
+    const LS_MODE = 'cb2d_mode';
+    const LS_LAYERS = 'cb2d_layers';
 
     function getProfile(){ return localStorage.getItem(LS_PROFILE) || 'motoG7'; }
     function setProfile(p){ localStorage.setItem(LS_PROFILE, p); }
@@ -251,6 +248,62 @@
     }
     function setBarLenCm(n){ localStorage.setItem(LS_BARLEN, String(n)); }
 
+    function getMode(){ return localStorage.getItem(LS_MODE) || 'full'; }
+    function setMode(m){ localStorage.setItem(LS_MODE, m); }
+
+    function getLayers(){
+      return localStorage.getItem(LS_LAYERS) || 'auto';
+    }
+    function setLayers(v){
+      localStorage.setItem(LS_LAYERS, v);
+    }
+
+    /* =========================
+       Mesure exacte N par delta
+       - rend à scale=1 et scale=2
+       - annule offset & corrige DPR
+    ==========================*/
+    function measureModulesDelta(bcid, text, opts = {}) {
+      const dpr = Math.max(1, window.devicePixelRatio || 1);
+
+      function renderAt(scale) {
+        const c = document.createElement('canvas');
+        c.width = 0; c.height = 0; // reset
+        bwipjs.toCanvas(c, {
+          bcid,
+          text,
+          scale,
+          padding: 0,
+          includetext: false,
+          backgroundcolor: 'FFFFFF',
+          ...opts,
+        });
+        return { w: c.width, h: c.height };
+      }
+
+      const a = renderAt(1);
+      const b = renderAt(2);
+
+      if (a.w <= 0 || a.h <= 0 || b.w <= 0 || b.h <= 0) return null;
+
+      const nW = (b.w - a.w) / (dpr * (2 - 1));
+      const nH = (b.h - a.h) / (dpr * (2 - 1));
+      let nFloat = (nW + nH) / 2;
+
+      // Snap à l'impair le plus proche (Aztec -> 13,15,17,19,23,...)
+      let N = Math.round(nFloat);
+      if (N % 2 === 0) {
+        const down = N - 1, up = N + 1;
+        const errDown = Math.abs(nW - down) + Math.abs(nH - down);
+        const errUp   = Math.abs(nW - up)   + Math.abs(nH - up);
+        N = errDown <= errUp ? down : up;
+      }
+
+      // Bornes de bon sens
+      if (N < 9 || N > 191) return null;
+
+      return N;
+    }
 
     /* =========================
        Règle calibrée
@@ -291,7 +344,7 @@
       for(let cm=0,x=0;x<=W+0.001;cm++,x=cm*ppcm){
         ctx.beginPath(); ctx.moveTo(Math.round(x)+0.5,0); ctx.lineTo(Math.round(x)+0.5,10); ctx.stroke();
         ctx.textAlign='center'; ctx.textBaseline='top'; ctx.fillText(cm+' cm', Math.round(x), 12);
-        for(let m=1;m<10;m++){
+        for (let m=1;m<10;m++){
           const xm=x+m*ppmm; if(xm>W) break;
           ctx.beginPath(); ctx.moveTo(Math.round(xm)+0.5,0); ctx.lineTo(Math.round(xm)+0.5,(m%5===0?8:5)); ctx.stroke();
         }
@@ -299,7 +352,7 @@
       for(let cm=0,y=0;y<=H+0.001;cm++,y=cm*ppcm){
         ctx.beginPath(); ctx.moveTo(0,Math.round(y)+0.5); ctx.lineTo(10,Math.round(y)+0.5); ctx.stroke();
         ctx.textAlign='left'; ctx.textBaseline='middle'; ctx.fillText(cm+' cm',12,Math.round(y));
-        for(let m=1;m<10;m++){
+        for (let m=1;m<10;m++){
           const ym=y+m*ppmm; if(ym>H) break;
           ctx.beginPath(); ctx.moveTo(0,Math.round(ym)+0.5);
           ctx.lineTo((m%5===0?8:5),Math.round(ym)+0.5); ctx.stroke();
@@ -330,18 +383,41 @@
     const barEl      = document.getElementById('bar');
     const barRadios  = [...document.querySelectorAll('input[name="barLen"]')];
 
+    const modeSel    = document.getElementById('modeSel');
+    const layersSel  = document.getElementById('layersSel');
+    const aztecInfo  = document.getElementById('aztecInfo');
+
+    function getAztecOpts() {
+      const mode = modeSel.value;      // 'full' | 'compact'
+      const layersV = layersSel.value; // 'auto' | '0'..'8'
+      const bcid = (mode === 'compact') ? 'azteccodecompact' : 'azteccode';
+      const opts = {};
+      if (layersV !== 'auto') {
+        opts.layers = parseInt(layersV, 10);
+      }
+      return { bcid, opts, mode, layersV };
+    }
+
+    function syncAztecInfo() {
+      const { mode, layersV } = getAztecOpts();
+      aztecInfo.textContent = `Mode: ${mode} • Layers: ${layersV}`;
+    }
+
     function renderAll(){
       const profile = profileSel.value;
+
       // 1) valeurs UI
       const sizeCm = Number(sizeRange.value); sizeValue.textContent=sizeCm.toFixed(1);
       const bytes = Number(bytesRange.value); bytesValue.textContent=bytes;
 
-      // 2) modules (déf. C) — robuste aussi pour petits symboles
-      const bcid='azteccode'; // passer à 'azteccodecompact' si tu forces le compact
-      const text=buildPayload(bytes);
-      const N = measureModulesExact(bcid, text) || 1;
+      // 2) paramètres Aztec (mode/layers)
+      const { bcid, opts } = getAztecOpts();
 
-      // 3) taille CSS calibrée FIXE
+      // 3) modules (déf. C) — mesure exacte par delta (annule DPR + offset)
+      const text=buildPayload(bytes);
+      const N = measureModulesDelta(bcid, text, opts) || 1;
+
+      // 4) taille CSS calibrée FIXE
       const dpr=Math.max(1,window.devicePixelRatio||1);
       const targetCssPx = sizeCm * pxPerCm(profile);
       const targetDevPx = targetCssPx * dpr;
@@ -351,16 +427,16 @@
       cb2dCanvas.style.width = targetCssPx+'px';
       cb2dCanvas.style.height= targetCssPx+'px';
 
-      // 4) densité et alerte
+      // 5) densité et alerte
       const pxPerModule = targetDevPx / N;
       const tooSmall = pxPerModule < 1;
       cb2dWrap.style.background = tooSmall ? 'var(--error-bg)' : 'transparent';
 
-      // 5) mils/module
+      // 6) mils/module
       const cmPerModule = sizeCm / N;
       const milsPerModule = (cmPerModule / CM_PER_INCH) * 1000;
 
-      // 6) rendu oversamplé puis ramené à taille FIXE (nearest-neighbor)
+      // 7) rendu oversamplé puis ramené à taille FIXE (nearest-neighbor)
       const baseScale = Math.max(1, Math.round(Math.min(pxPerModule, 12)));
       cb2dCanvas.width = N * baseScale;
       cb2dCanvas.height= N * baseScale;
@@ -377,7 +453,14 @@
           ctx.textAlign='center'; ctx.textBaseline='middle';
           ctx.fillText('< 1 px/module', cb2dCanvas.width/2, cb2dCanvas.height/2);
         }else{
-          bwipjs.toCanvas(cb2dCanvas, { bcid, text, scale:baseScale, padding:0, backgroundcolor:'FFFFFF', includetext:false });
+          bwipjs.toCanvas(cb2dCanvas, {
+            bcid, text,
+            scale: baseScale,
+            padding: 0,
+            includetext: false,
+            backgroundcolor: 'FFFFFF',
+            ...opts
+          });
         }
       }catch(err){
         console.error('Rendu CB2D échoué :', err);
@@ -388,7 +471,7 @@
         ctx.fillText('Erreur CB2D', cb2dCanvas.width/2, cb2dCanvas.height/2);
       }
 
-      // 7) Règle & Footer & derive info
+      // 8) Règle & Footer & derive info
       renderRuler(profile);
       footer.textContent = `N : ${N} × ${N} — mils/mod : ${milsPerModule.toFixed(1)} — Taille : ${sizeCm.toFixed(1)} cm`;
       derivedInfo.textContent = `N=${N} • ${milsPerModule.toFixed(1)} mils/mod`;
@@ -417,6 +500,7 @@
       updateBarWidth(p);
     }
 
+    // Elements
     sizeRange.addEventListener('input', renderAll);
     bytesRange.addEventListener('input', renderAll);
 
@@ -449,6 +533,25 @@
       updateBarWidth(profileSel.value);
     }));
 
+    modeSel.addEventListener('change', ()=>{
+      setMode(modeSel.value);
+      syncAztecInfo();
+      renderAll();
+    });
+    layersSel.addEventListener('change', ()=>{
+      setLayers(layersSel.value);
+      syncAztecInfo();
+      renderAll();
+    });
+
+    function syncAztecUIFromState(){
+      const mode = getMode();
+      const layers = getLayers();
+      modeSel.value = mode;
+      layersSel.value = layers;
+      syncAztecInfo();
+    }
+
     // Init + resize
     (function init(){
       // Profil Moto G7 par défaut + facteurs par défaut s'ils n'existent pas déjà
@@ -456,8 +559,11 @@
       if(!localStorage.getItem(LS_CAL_MOTO)) setCalFactor('motoG7', 1.600);
       if(!localStorage.getItem(LS_CAL_CUSTOM)) setCalFactor('custom', 1.000);
       if(!localStorage.getItem(LS_BARLEN)) setBarLenCm(5);
+      if(!localStorage.getItem(LS_MODE)) setMode('full');
+      if(!localStorage.getItem(LS_LAYERS)) setLayers('auto');
 
       syncCalUIFromState();
+      syncAztecUIFromState();
       renderAll();
 
       window.addEventListener('resize', ()=>{
