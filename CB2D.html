@@ -258,12 +258,8 @@
       localStorage.setItem(LS_LAYERS, v);
     }
 
-    /* =========================
-       Mesure exacte N par delta
-       - rend à scale=1 et scale=2
-       - annule offset & corrige DPR
-    ==========================*/
-    function measureModulesDelta(bcid, text, eclevel) {
+
+    function measureModules(bcid, text, eclevel) {
 		const result = bwipjs.raw({
 			bcid,
 			text,
@@ -389,7 +385,7 @@
 
       // 3) modules (déf. C) — mesure exacte par delta (annule DPR + offset)
       const text=buildPayload(bytes);
-      const N = measureModulesDelta(bcid, text, eccLevel) || 1;
+      const N = measureModules(bcid, text, eccLevel) || 1;
 
       // 4) taille CSS calibrée FIXE
       const dpr=Math.max(1,window.devicePixelRatio||1);
