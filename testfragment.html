@@ -1,0 +1,28 @@
+<html>
+<head>
+<style>
+html {
+    font-size: 300%
+}
+</style>
+</head>
+<body>
+<div id="frag"></div>
+</body>
+<script>
+
+//const hash = new URLSearchParams(location.hash.slice(1));
+//const data = JSON.parse(atob(hash.get("d")));
+let searchParams = new URLSearchParams(location.hash.substring(1))
+for (const p of searchParams) {
+  console.log("param:"+p);
+  document.getElementById("frag").innerHTML+= "<p>"+p+"</p>";
+}
+
+//let content=decodeURI(location.hash);
+//console.log(content);
+//document.getElementById("frag").innerHTML=content;
+//location.hash = ""
+
+</script>
+</html>
