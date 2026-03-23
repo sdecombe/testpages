@@ -1,0 +1,58 @@
+<html>
+<head>
+<style>
+html {
+    font-size: 300%
+}
+</style>
+</head>
+<body>
+<div id="frag"></div>
+</body>
+<script>
+
+let globalPub = null;
+
+function buf2hex(buffer) { // buffer is an ArrayBuffer
+console.assert(buffer instanceof ArrayBuffer)
+  return [...new Uint8Array(buffer)]
+      .map(x => x.toString(16).padStart(2, '0'))
+      .join('');
+}
+
+async function generateKey() {
+  console.log("=== generate key ===")
+  let keyPair = await crypto.subtle.generateKey({name: "ECDSA", namedCurve: "P-256"}, true, ["sign"]);
+  let pub = await crypto.subtle.exportKey('jwk', keyPair.publicKey);
+  let priv = await crypto.subtle.exportKey('jwk', keyPair.privateKey);
+  console.log("pub:"+JSON.stringify(pub));
+  console.log("priv:"+JSON.stringify(priv));
+}
+async function run() {
+  console.log("=== run ===")
+  var key = {"crv":"P-256","d":"bfsXhMpkts_K7zQwoUxgUTQ-fnxvahz0Jx2TQ6l-EC0","ext":true,"key_ops":["sign"],"kty":"EC","x":"7SOIlwYh516aJ6CfoHxiLZmZIRKiJxfmQEoZxV-CVTE","y":"4Pg3WqvlKMrrN0TP57_x54xL-nmoVqZ8l22TVOhXaEQ"};
+  //var pubKey = {"crv":"P-256","ext":true,"key_ops":["verify"],"kty":"EC","x":"7SOIlwYh516aJ6CfoHxiLZmZIRKiJxfmQEoZxV-CVTE","y":"4Pg3WqvlKMrrN0TP57_x54xL-nmoVqZ8l22TVOhXaEQ"};
+  priv = await crypto.subtle.importKey('jwk', key, {name: "ECDSA", namedCurve: "P-256"}, false, ["sign"]);
+  
+  let pubKey = {...key}
+  pubKey.key_ops = ["verify"]
+  delete pubKey.d
+  console.log("pub imported:"+JSON.stringify(pubKey));
+  console.log("priv imported:"+JSON.stringify(key));
+  let pub = await crypto.subtle.importKey('jwk', pubKey, {name: "ECDSA", namedCurve: "P-256"}, true, ["verify"]);
+  let pubExport = crypto.subtle.exportKey('raw', pub);
+  globalPub = pubExport;
+  console.info("pubExport:" + buf2hex(await pubExport));
+  console.info("end");
+}
+async function checkKey() {
+  console.log("global pub key:"+ buf2hex(await globalPub));
+}
+async function main() {
+	await generateKey();
+	await run()
+	checkKey()
+}
+main();
+</script>
+</html>
